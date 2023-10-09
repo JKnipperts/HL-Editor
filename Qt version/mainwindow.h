@@ -4,15 +4,13 @@
 
 #include <QMainWindow>
 
+
+
 QT_BEGIN_NAMESPACE
-class QAction;
-class QActionGroup;
-class QLabel;
-class QMenu;
 class QScrollArea;
 class QScrollBar;
+class QLabel;
 QT_END_NAMESPACE
-
 
 
 
@@ -37,7 +35,10 @@ private slots:
     void newFile();
     void open();
     void save();
-    void grid();
+    void griddiag();
+    void tilewindowdiag();
+    void unitwindowdiag();
+    void mapresizediag();
     void setPath();
     void setScale();
 
@@ -45,7 +46,9 @@ private:
     void createActions();
     void createMenus();
     void adjustScrollBar(QScrollBar *scrollBar, double factor);
+
     QScrollArea *scrollArea;
+
 
     QMenu *fileMenu;
     QMenu *editMenu;
@@ -57,6 +60,9 @@ private:
     QAction *setPathAct;
     QAction *setScaleFactorAct;
     QAction *showgridAct;
+    QAction *showtilewindowAct;
+    QAction *showunitwindowAct;
+    QAction *mapresizeAct;
     QLabel  *infoLabel;
 
 

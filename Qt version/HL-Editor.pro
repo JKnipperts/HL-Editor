@@ -15,7 +15,9 @@ HEADERS += \
     Lib.h \
     fin.h \
     mainwindow.h \
-    other.h
+    other.h \
+    tilelist.h \
+    unitlist.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

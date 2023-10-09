@@ -185,7 +185,7 @@ int Save_Mapdata(std::string mapname)
         return -2; //Write Error
     }
 
-    IO_result = fwrite(Map.data, Map.data_size, 1, f); //Write map data
+    IO_result = fwrite(Map.data, (Map.width*Map.height)*2, 1, f); //Write map data
     if (IO_result != 1)
     {
         fclose(f);
@@ -219,29 +219,29 @@ int  Draw_Map()
             memcpy(&Field, Map.data + offset, sizeof(Field));
 			offset = offset + sizeof(Field);
 			if (Field.Part != 0xAE)
-			{
-				if (x % 2 != 0)
-				{
-                    Draw_Part((x * (Tilesize - Tileshift)), (y * Tilesize) + (Tilesize / 2), Field.Part);
-					if (Field.Unit != 0xFF)
-					{
-						if (Field.Unit % 2 == 0) side = 1; else side = 2;
-						unit = (Field.Unit / 2) * 6;
-						if (side == 1) unit = unit + 3;
-                        Draw_Unit((x * (Tilesize - Tileshift)), (y * Tilesize) + (Tilesize / 2), unit, side);
-					}
-				}
-				else
-				{
-                    Draw_Part((x * (Tilesize - Tileshift)), (y * Tilesize), Field.Part);
-					if (Field.Unit != 0xFF)
-					{
-						if (Field.Unit % 2 == 0) side = 1; else side = 2;
-						unit = (Field.Unit / 2) * 6;
-						if (side == 1) unit = unit + 3;
-                        Draw_Unit((x * (Tilesize - Tileshift)), (y * Tilesize), unit, side);
-					}
-				}
+            {
+                if (x % 2 != 0)
+                {
+                    Draw_Part((x * (Tilesize - Tileshift)), (y * Tilesize) + (Tilesize / 2), Field.Part, &MapImage);
+                    if (Field.Unit != 0xFF)
+                    {
+                        if (Field.Unit % 2 == 0) side = 1; else side = 2;
+                        unit = (Field.Unit / 2) * 6;
+                        if (side == 1) unit = unit + 3;
+                        Draw_Unit((x * (Tilesize - Tileshift)), (y * Tilesize) + (Tilesize / 2), unit, side, &MapImage);
+                    }
+                }
+                else
+                {
+                    Draw_Part((x * (Tilesize - Tileshift)), (y * Tilesize), Field.Part, &MapImage);
+                    if (Field.Unit != 0xFF)
+                    {
+                        if (Field.Unit % 2 == 0) side = 1; else side = 2;
+                        unit = (Field.Unit / 2) * 6;
+                        if (side == 1) unit = unit + 3;
+                        Draw_Unit((x * (Tilesize - Tileshift)), (y * Tilesize), unit, side, &MapImage);
+                    }
+                }
 			}
 		}
 	}

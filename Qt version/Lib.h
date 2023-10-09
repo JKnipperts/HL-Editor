@@ -2,8 +2,9 @@
 /*
 LIB.H by Jan Knipperts
 Provides all the functions to load bitmaps from the ressurce files of the game Historyline 1914-1918.
-Version 1.2 - 28.8.2023
+Version 1.21 - 05.10.2023
 - some small modifications for use with Qt
+- Draw_Part and Draw_Unit accept now a destination QImage as parameter
 
 The main features:
 
@@ -715,7 +716,7 @@ int Load_Unit_files(std::string unitlib_filename,std::string unitdat_filename)
 
 
 
-void draw_8BPP(int pos_x, int pos_y)
+void draw_8BPP(int pos_x, int pos_y, QImage *Image)
 {
   int start_x = 0;
   int blocks = 0;
@@ -746,7 +747,7 @@ void draw_8BPP(int pos_x, int pos_y)
               color = Partlib.data[bitmap_offset];  //Get next unsigned char
 			  ++bitmap_offset;
 			  if (color != BM_Header.transparent)
-                  MapImage.setPixel(pos_x + x, pos_y + y, qRgb(HL_Palette[color].Red,HL_Palette[color].Green,HL_Palette[color].Blue));
+                  Image->setPixel(pos_x + x, pos_y + y, qRgb(HL_Palette[color].Red,HL_Palette[color].Green,HL_Palette[color].Blue));
 
 	      }
 	  }
@@ -763,7 +764,7 @@ void draw_8BPP(int pos_x, int pos_y)
 
 
 
-void draw_4BPP(int pos_x, int pos_y, int side)
+void draw_4BPP(int pos_x, int pos_y, int side, QImage *Image)
 {
   int start_x = 0;
   int blocks = 0;
@@ -800,11 +801,11 @@ void draw_4BPP(int pos_x, int pos_y, int side)
                 color1 = (unsigned char) (color  >> 4);
                 color2 = (unsigned char) (color & 0x0F);
                 if (color1 != BM_Header.transparent)
-                    MapImage.setPixel(pos_x + x, pos_y + y, qRgb(HL_Palette[color1+side].Red,HL_Palette[color1+side].Green,HL_Palette[color1+side].Blue));
+                    Image->setPixel(pos_x + x, pos_y + y, qRgb(HL_Palette[color1+side].Red,HL_Palette[color1+side].Green,HL_Palette[color1+side].Blue));
             }
 			else
                 if (color2 != BM_Header.transparent)
-                    MapImage.setPixel(pos_x + x, pos_y + y, qRgb(HL_Palette[color2+side].Red,HL_Palette[color2+side].Green,HL_Palette[color2+side].Blue));
+                Image->setPixel(pos_x + x, pos_y + y, qRgb(HL_Palette[color2+side].Red,HL_Palette[color2+side].Green,HL_Palette[color2+side].Blue));
 
 	      }
 		}
@@ -860,10 +861,10 @@ int Translate_Unitnum(int unit_num)
 	return o;
 }
 
-int Draw_Part(int xpos, int ypos, int part_num)
+int Draw_Part(int xpos, int ypos, int part_num, QImage *Image)
 {
 	if (part_num > Num_Parts) part_num = Num_Parts; //Invalid Part number -> draw "Verboten"
-
+    if (Image == NULL) return -1;
 	part_num = Translate_Partnum(part_num);
 
 	bitmap_offset = Partlib.Index[part_num].Offset - 4;
@@ -873,11 +874,11 @@ int Draw_Part(int xpos, int ypos, int part_num)
 	bitmap_offset = bitmap_offset + sizeof(BM_Header);
 	if ((bitmap_offset + (BM_Header.width * BM_Header.height)) > Partlib.data_size) return -1;
 
-    draw_8BPP(xpos, ypos);
+    draw_8BPP(xpos, ypos, Image);
 	return 0;
 }
 
-int Draw_Unit(int xpos, int ypos, int unit_num, int side)
+int Draw_Unit(int xpos, int ypos, int unit_num, int side, QImage *Image)
 {
 	if (unit_num > Num_Units*6) return -1;
 	
@@ -891,7 +892,7 @@ int Draw_Unit(int xpos, int ypos, int unit_num, int side)
 	bitmap_offset = bitmap_offset + sizeof(BM_Header);
 	if ((bitmap_offset + (BM_Header.width * BM_Header.height)) > Partlib.data_size) return -1;
 
-    draw_4BPP(xpos, ypos,side);
+    draw_4BPP(xpos, ypos,side, Image);
 	return 0;
 }
 
