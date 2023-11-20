@@ -209,7 +209,7 @@ int  Draw_Map()
 	offset = 0;
     side = 1;
 
-    if ((Map.data == NULL) || (Map.loaded = false)) return -1; // No map loaded
+    if ((Map.data == NULL) || (Map.loaded == false)) return -1; // No map loaded
 
 
     for (y = 0; y < Map.height; y++)

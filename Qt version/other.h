@@ -1,34 +1,48 @@
+/* OTHER.H
+ * Additional functions for the Hisotry Line Mapeditor. Draw hexagons, release memory, create child windows, etc.
+*/
 
-
-void Release_Buffers() //Memory cleanup...
+void Release_Buffers()
+//Memory cleanup...
 {
     if (Map.data != NULL) free(Map.data);
     if (Partlib.data != NULL) free(Partlib.data);
     if (Unitlib.data != NULL) free(Unitlib.data);
+    if (Building_info != NULL) free(Building_info);
+    if (SHP.buildings != NULL) free(SHP.buildings);
+
     return;
 }
 
 bool Check_for_game_files()
+//Check whether game resources are available
 {
     QFile PalFile(GameDir + Palette_name);
     QFile UnitdatFile(GameDir + Unitdat_name);
     QFile UnitlibFile(GameDir + Unitlib_name);
-    QFile PartdatFile(GameDir + Partdat_name);
-    QFile PartlibFile(GameDir + Partlib_name);
+    QFile Partdat_S_File(GameDir + Partdat_S_name);
+    QFile Partlib_S_File(GameDir + Partlib_S_name);
+    QFile Partdat_W_File(GameDir + Partdat_W_name);
+    QFile Partlib_W_File(GameDir + Partlib_W_name);
+    QFile CodeFile = (GameDir + Code_name);
 
 
 
     if ((PalFile.exists() == false) ||
         (UnitdatFile.exists() == false) ||
         (UnitlibFile.exists() == false) ||
-        (PartdatFile.exists() == false) ||
-        (PartlibFile.exists() == false))
+        (Partdat_S_File.exists() == false) ||
+        (Partlib_S_File.exists() == false) ||
+        (Partdat_W_File.exists() == false) ||
+        (Partlib_W_File.exists() == false) ||
+        (CodeFile.exists() == false))
         return false;
     else
         return true;
 }
 
 bool Read_Config()
+//Reading the configuration file
 {
     QDir           dir;
 
@@ -60,6 +74,7 @@ bool Read_Config()
 
 
 int Load_Ressources()
+//Loading game resources
 {
     QMessageBox              Errormsg;
     QString                  C_Filename1;
@@ -74,23 +89,34 @@ int Load_Ressources()
 
     if (Load_Unit_files(C_Filename1.toStdString().data(),C_Filename2.toStdString().data()) != 0)
     {
-        Errormsg.critical(0,"Error","Error loading terrain files!");
+        Errormsg.critical(0,"Error","Error loading unit files!");
         Errormsg.setFixedSize(500,200);
         Release_Buffers();
         return -1;
     }
 
     //Load part/terrain bitmaps
-    C_Filename1 = (GameDir + Partlib_name); //Create C style filenames for use of stdio
-    C_Filename1.replace("/", "\\");
-    C_Filename2 = (GameDir + Partdat_name);
-    C_Filename2.replace("/", "\\");
+
+    if (summer == false)  //it's winter
+    {
+        C_Filename1 = (GameDir + Partlib_W_name); //Create C style filenames for use of stdio
+        C_Filename1.replace("/", "\\");
+        C_Filename2 = (GameDir + Partdat_W_name);
+        C_Filename2.replace("/", "\\");
+    }
+    else  //it's summer
+    {
+        C_Filename1 = (GameDir + Partlib_S_name); //Create C style filenames for use of stdio
+        C_Filename1.replace("/", "\\");
+        C_Filename2 = (GameDir + Partdat_S_name);
+        C_Filename2.replace("/", "\\");
+    }
 
     if (Load_Part_files(C_Filename1.toStdString().data(),C_Filename2.toStdString().data()) != 0)
     {
-        Errormsg.critical(0,"Error","Error loading unit files!");
+        Errormsg.critical(0,"Error","Error loading terrain files!");
         Errormsg.setFixedSize(500,200);
-        Release_Buffers();
+        if (Partlib.data != NULL) free(Partlib.data);
         return -1;
     }
 
@@ -105,11 +131,27 @@ int Load_Ressources()
         Release_Buffers();
         return -1;
     }
+
+
+    //Load levelcodes
+    C_Filename1 = (GameDir + Code_name); //Create a C style filename for use of stdio
+    C_Filename1.replace("/'", "\\'");
+
+    if (Get_Levelcodes(C_Filename1.toStdString().data()) != 0)
+    {
+        Errormsg.critical(0,"Error","Error reading levelcodes!");
+        Errormsg.setFixedSize(500,200);
+        Release_Buffers();
+        return -1;
+    }
+
+    Res_loaded = true;
     return 0;
 }
 
 
 int Load_Map()
+//Load a map file
 {
     QMessageBox              Errormsg;
     QString                  C_Filename;
@@ -121,9 +163,25 @@ int Load_Map()
     {
         Errormsg.critical(0,"Error","Error loading map data!");
         Errormsg.setFixedSize(500,200);
-       // Release_Buffers();
+        Release_Buffers();
         return -1;
     }
+
+    C_Filename.replace(".fin",".shp").replace(".FIN",".SHP");
+
+
+    if (Read_shp_data(C_Filename.toStdString().data()) != 0)
+    {
+        Errormsg.warning(0,"Warning:","Cannot find building data for this map!");
+        Errormsg.setFixedSize(500,200);
+        memset(SHP.can_be_built,0,sizeof(SHP.can_be_built));
+        Building_info = NULL;
+
+        Create_building_record_from_map();
+    }
+    else
+        Add_building_positions();
+
     return 0;
 }
 
@@ -209,11 +267,14 @@ void ShowGrid()
     {
         int x,y;
 
-        for (y = 0; y < Map.height; y++)
+        for (y = 0; y < (Map.height-1); y++)
         {
-            for (x = 0; x < Map.width; x++)
+            for (x = 0; x < (Map.width-1); x++)
             {
+                if (summer)
                 Draw_Hexagon(x,y,QPen(Qt::white, 1),&MapImageScaled,true,true);
+                else
+                Draw_Hexagon(x,y,QPen(Qt::black, 1),&MapImageScaled,true,true);
             }
         }    
     }
@@ -227,6 +288,7 @@ void Create_Tileselection_window()
     {
         tile_selection = new tilelistwindow();
         tile_selection->setWindowFlag(Qt::SubWindow);
+        tile_selection->setWindowFlags(Qt::WindowStaysOnTopHint);
         tile_selection->resize(((11*Tilesize)*Scale_factor)+10, ((11*Tilesize)*Scale_factor));
         tile_selection->setWindowTitle("Tile selection");
 
@@ -248,7 +310,8 @@ void Create_Tileselection_window()
         }
 
         TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Create a scaled version of it
-
+        Draw_Hexagon(0,0,QPen(Qt::red, 1),&TileListImageScaled,false,true);
+        selected_tile = 0;
         QLabel *label = new QLabel();
         QHBoxLayout *layout = new QHBoxLayout();
         label->setPixmap(QPixmap::fromImage(TileListImageScaled));
@@ -271,6 +334,7 @@ void Create_Unitselection_window()
     {
         unit_selection = new unitlistwindow();
         unit_selection->setWindowFlag(Qt::SubWindow);
+        unit_selection->setWindowFlags(Qt::WindowStaysOnTopHint);
         unit_selection->resize(((11*Tilesize)*Scale_factor)+10, (2*((Num_Units/10)+1)*Tilesize)*Scale_factor);
         unit_selection->setWindowTitle("Unit selection");
 
@@ -297,7 +361,7 @@ void Create_Unitselection_window()
         for (int tc = 0; tc < Num_Units; tc++)
         {
             Draw_Unit(tx*Tilesize,ty*Tilesize,tc*6,2,&UnitListImage);
-             tx++;
+            tx++;
             if (tx == 10)
             {
                 tx = 0;
@@ -322,4 +386,159 @@ void Create_Unitselection_window()
 
         unit_selection->show();
     }
+}
+
+
+void Create_buildable_units_window()
+{
+
+        buildable = new buildablewindow();
+        buildable->setWindowFlag(Qt::SubWindow);
+        buildable->setWindowFlags(Qt::WindowStaysOnTopHint);
+        buildable->resize(((11*Tilesize)*Scale_factor)+10, (((Num_Units/10)+1)*Tilesize)*Scale_factor);
+        buildable->setWindowTitle("Units buildable in factories");
+
+        BuildableImage = QImage((10*Tilesize),((Num_Units/10)+1)*Tilesize, QImage::Format_RGB16); //Create a new QImage object
+        BuildableImage.fill(Qt::transparent);
+
+
+        int tx = 0;
+        int ty = 0;
+
+        for (int tc = 0; tc < Num_Units; tc++)
+        {
+        if (SHP.can_be_built[tc] == 0)
+            Draw_Unit(tx*Tilesize,ty*Tilesize,tc*6,1,&BuildableImage);
+        else
+            Draw_Unit(tx*Tilesize,ty*Tilesize,tc*6,3,&BuildableImage);
+
+
+        tx++;
+        if (tx == 10)
+        {
+            tx = 0;
+            ty++;
+        }
+        }
+
+
+        BuildableImageScaled = BuildableImage.scaled(BuildableImage.width()*Scale_factor,BuildableImage.height()*Scale_factor); //Create a scaled version of it
+
+
+        QLabel *label = new QLabel();
+        QHBoxLayout *layout = new QHBoxLayout();
+        label->setPixmap(QPixmap::fromImage(BuildableImageScaled));
+
+        buildablescrollArea = new(QScrollArea);
+        buildablescrollArea->setBackgroundRole(QPalette::Dark);
+        buildablescrollArea->setWidget(label);
+        buildablescrollArea->setVisible(true);
+        layout->addWidget(buildablescrollArea);
+        buildable->setLayout(layout);
+
+        buildable->show();
+
+}
+
+
+void Create_building_configuration_window(int index)
+{
+
+        if (index == -1)
+        {
+            QMessageBox              Errormsg;
+            Errormsg.critical(0,"Error","There is no data record for this building!");
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+        building_window = new buildingwindow();
+        building_window->setWindowFlag(Qt::SubWindow);
+        building_window->setWindowFlags(Qt::MSWindowsFixedSizeDialogHint | Qt::WindowStaysOnTopHint);
+
+        QString title = "Properties of ";
+        switch (Building_info[index].Properties->Owner)
+        {
+        case 0:
+        title += "German ";
+        break;
+        case 1:
+        title += "French ";
+        break;
+        case 2:
+        title += "Neutral ";
+        break;
+        }
+
+        switch (Building_info[index].Properties->Type)
+        {
+        case 0:
+        title += "Headquarter";
+        break;
+        case 1:
+        title += "Factory";
+        break;
+        case 2:
+        title += "Depot ";
+        break;
+        case 3:
+        title += "Transport Unit ";
+        break;
+        }
+
+
+
+        building_window->setWindowTitle(title);
+
+        Building_Image = QImage((7*Tilesize),Tilesize+1, QImage::Format_RGB16); //Create a new QImage object
+        Building_Image.fill(Qt::transparent);
+
+
+        for (int i = 0; i < 7; i++)
+        {
+            if (index != -1)
+            {
+            if (Building_info[index].Properties->Units[i] != 0xFF)
+                Draw_Unit(i * Tilesize, 0,(Building_info[index].Properties->Units[i] * 6) , Building_info[index].Properties->Owner+1, &Building_Image);
+            }
+        }
+
+
+
+        Building_Image_Scaled = Building_Image.scaled(Building_Image.width()*Scale_factor,Building_Image.height()*Scale_factor); //Create a scaled version of it
+
+        for (int i = 0; i < 7; i++)
+            Draw_Hexagon(i,0,QPen(Qt::white, 1),&Building_Image_Scaled,false,true);
+
+
+        QLabel *textlabel1 = new QLabel();
+        textlabel1->setText("Units in the building:");
+        QLabel *textlabel2 = new QLabel();
+        textlabel2->setText("Resources generated by this building per turn:");
+
+        QLabel *bitmaplabel = new QLabel();
+         bitmaplabel->setPixmap(QPixmap::fromImage(Building_Image_Scaled));
+
+        Building_ScrollArea = new(QScrollArea);
+        Building_ScrollArea->setBackgroundRole(QPalette::Dark);
+        Building_ScrollArea->setWidget(bitmaplabel);
+        Building_ScrollArea->resize(Building_Image_Scaled.width(),Building_Image_Scaled.height());
+        Building_ScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        Building_ScrollArea->verticalScrollBar()->hide();
+        Building_ScrollArea->verticalScrollBar()->resize(0, 0);
+        Building_ScrollArea->setVisible(true);
+
+        RessourceEdit = new QLineEdit;
+        RessourceEdit->setValidator( new QIntValidator(0, 100) );
+        if (index != -1)
+            RessourceEdit->setText(QString::number(Building_info[index].Properties->Resources));  //Bisherigen wert anzeigen
+
+        QVBoxLayout *layout = new QVBoxLayout();
+        layout->addWidget(textlabel1);
+        layout->addWidget(Building_ScrollArea);
+        layout->addWidget(textlabel2);
+        layout->addWidget(RessourceEdit);
+
+
+        building_window->setLayout(layout);
+        building_window->show();
 }

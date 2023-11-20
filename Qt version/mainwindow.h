@@ -4,15 +4,11 @@
 
 #include <QMainWindow>
 
-
-
 QT_BEGIN_NAMESPACE
 class QScrollArea;
 class QScrollBar;
 class QLabel;
 QT_END_NAMESPACE
-
-
 
 class MainWindow : public QMainWindow
 {
@@ -26,21 +22,24 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
 #endif // QT_NO_CONTEXTMENU
 
-  //  void paintEvent(QPaintEvent *event) override;
     void closeEvent (QCloseEvent *event) override;
     void mousePressEvent (QMouseEvent *event) override;
 
 
 private slots:
-    void newFile();
-    void open();
-    void save();
-    void griddiag();
-    void tilewindowdiag();
-    void unitwindowdiag();
-    void mapresizediag();
-    void setPath();
-    void setScale();
+    void newFile_diag();
+    void open_diag();
+    void save_diag();
+    void add_diag();
+    void grid_diag();
+    void tilewindow_diag();
+    void unitwindow_diag();
+    void map_resize_diag();
+    void season_diag();
+    void flood_diag();
+    void buildable_units_diag();
+    void setPath_diag();
+    void setScale_diag();
 
 private:
     void createActions();
@@ -56,6 +55,7 @@ private:
     QAction *newAct;
     QAction *openAct;
     QAction *saveAct;
+    QAction *addtogameAct;
     QAction *exitAct;
     QAction *setPathAct;
     QAction *setScaleFactorAct;
@@ -63,6 +63,9 @@ private:
     QAction *showtilewindowAct;
     QAction *showunitwindowAct;
     QAction *mapresizeAct;
+    QAction *changeseasonAct;
+    QAction *floodAct;
+    QAction *buildableunitsAct;
     QLabel  *infoLabel;
 
 

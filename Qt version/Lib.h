@@ -280,61 +280,64 @@ int Unpack_file(FILE* f)
 int Load_Palette(std::string pal_filename)
 // Loads a Palette file from the game
 {
-	FILE* f;
+    FILE* f;
     size_t          IO_result;
     int             i,o;
     unsigned int	fsize;
 
-	fopen_s(&f, pal_filename.data(), "rb");
+    fopen_s(&f, pal_filename.data(), "rb");
 
-	if (!f)
-	{
-		return -1;
-	}
+    if (!f)
+    {
+        return -1;
+    }
 
 
-	IO_result = fread(&ID, sizeof(ID), 1, f); //Read ID
+    IO_result = fread(&ID, sizeof(ID), 1, f); //Read ID
 
-	if (IO_result != 1)
-	{
-		fclose(f);
-		return -2; //Read Error
-	}
+    if (IO_result != 1)
+    {
+        fclose(f);
+        return -2; //Read Error
+    }
 
-	fseek(f, 0, SEEK_END);	//Get file size
-	fsize = ftell(f);
-	rewind(f);
+    fseek(f, 0, SEEK_END);	//Get file size
+    fsize = ftell(f);
 
-	if (ID == 0x4D575054) //"TPWM" string?
-	{
-		if (Unpack_file(f) != 0)
-		{
-			free(TPWM.unpacked_data);
-			return -5;		//Decompressing failed!
-		}
 
-		if (TPWM.unpacked_size < 256 * 3)
-		{
-			free(TPWM.unpacked_data);
-			return -3;		//File is corrupted or no palette file
-		}
+    if (ID == 0x4D575054) //"TPWM" string?
+    {
+        if (Unpack_file(f) != 0)
+        {
+            free(TPWM.unpacked_data);
+            return -5;		//Decompressing failed!
+        }
 
-		o = 0;
-		for (i = 0; i < 256; i++)
-		{
+        if (TPWM.unpacked_size < 256 * 3)
+        {
+            free(TPWM.unpacked_data);
+            return -3;		//File is corrupted or no palette file
+        }
+
+        o = 0;
+        for (i = 0; i < 256; i++)
+        {
             HL_Palette[i].Red = TPWM.unpacked_data[o];
             HL_Palette[i].Green = TPWM.unpacked_data[o + 1];
             HL_Palette[i].Blue = TPWM.unpacked_data[o + 2];
-			o = o + 3;
-		}
-	}
+            o = o + 3;
+        }
+    }
 	else
 	{
+
 		if (fsize < 256 * 3)
 		{
 			fclose(f);
 			return -3;
 		}
+
+        rewind(f);
 
 		for (i = 0; i < 256; i++)
 		{
