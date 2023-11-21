@@ -1,8 +1,10 @@
 /* SHP.H by Jan Knipperts
 Header file to read and write History Line 1914-1918 map files (*.shp)
 
-Version 1.0 - 23.10.2023
-
+Version 1.1 - 21.11.2023
+- Some minor bug fixes
+- Fixed a typo that prevented the recognition of French transport units.
+- Statistics extended by further information
 */
 
 
@@ -33,11 +35,29 @@ struct  SHP_struct
 
 struct Building_statistics
 {
-    unsigned char   num_HQ; //number of HQ (must be 2)
+    unsigned char   num_HQ; //number of HQ
+    unsigned char   num_GHQ;
+    unsigned char   num_FHQ;
+
     unsigned char   num_F;  //number of fabrications
+    unsigned char   num_NF;
+    unsigned char   num_GF;
+    unsigned char   num_FF;
+
     unsigned char   num_D; //number of depots
+    unsigned char   num_ND;
+    unsigned char   num_GD;
+    unsigned char   num_FD;
+
     unsigned char   num_T; //number of transport units
+    unsigned char   num_GT;
+    unsigned char   num_FT;
+
     unsigned char   num_buildings; //total number of buildings
+
+    unsigned char   num_GR;  //Ressource income
+    unsigned char   num_FR;
+
 };
 
 
@@ -54,11 +74,12 @@ int Read_shp_data(std::string shpname)
     unsigned int            fsize;
     unsigned int			ID;
     unsigned int            i;
-    QMessageBox             Errormsg;
+
 
     fopen_s(&f, shpname.data(), "rb");
 
     if (!f) return -1; //File not found
+
 
     IO_result = fread(&ID, sizeof(ID), 1, f); //Read ID
 
@@ -100,7 +121,12 @@ int Read_shp_data(std::string shpname)
     {
         rewind(f);
 
-        if (fsize < sizeof(SHP.can_be_built)+1) return -6; //File is corrupt
+
+        if (fsize < sizeof(SHP.can_be_built)+1)
+        {
+            fclose(f);
+            return -6; //File is corrupt
+        }
 
         IO_result = fread(&SHP.can_be_built, sizeof(SHP.can_be_built), 1, f);
 
@@ -121,7 +147,11 @@ int Read_shp_data(std::string shpname)
 
         if (SHP.num_buildings > 0)
         {
-            if (fsize != (ftell(f)+(SHP.num_buildings*sizeof(Building_data)))) return -6; //File is corrupt
+            if (fsize != (ftell(f)+(SHP.num_buildings*sizeof(Building_data))))
+            {
+                fclose(f);
+                return -6; //File is corrupt
+            }
 
 
             SHP.buildings = (Building_data*) malloc(SHP.num_buildings*sizeof(Building_data));
@@ -344,12 +374,9 @@ int Get_Buildings_info(int fieldno)
 void Create_building_record_from_map()
 {
     int offset;
+    memset(&Building_stat,0,sizeof(Building_stat));
 
-    Building_stat.num_buildings = 0;
-    Building_stat.num_HQ = 0;
-    Building_stat.num_D = 0;
-    Building_stat.num_F = 0;
-    Building_stat.num_T = 0;
+
     if (Building_info != NULL) free(Building_info);
     if (SHP.buildings != NULL) free(SHP.buildings);
 
@@ -385,67 +412,75 @@ void Create_building_record_from_map()
                 switch (Field.Part)
                 {
                 case 0x01:
-                {
-                    Building_stat.num_HQ++;
+                {                
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 0;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_HQ;
+                    Building_stat.num_HQ++;
+                    Building_stat.num_GHQ++;
                     break;
                 }
                 case 0x02:
                 {
-                    Building_stat.num_HQ++;
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 0;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_HQ;
+                    Building_stat.num_HQ++;
+                    Building_stat.num_FHQ++;
                     break;
                 }
                 case 0x0C:  //Factory neutral
-                {
-                    Building_stat.num_F++;
+                {                    
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 2;  //neutral
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
+                    Building_stat.num_F++;
+                    Building_stat.num_NF++;
                     break;
                 }
                 case 0x0D:  //Factory german
-                {
-                    Building_stat.num_F++;
+                {                    
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
+                    Building_stat.num_F++;
+                    Building_stat.num_GF++;
                     break;
                 }
                 case 0x0E:  //Factory french
-                {
-                    Building_stat.num_F++;
+                {                    
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
+                    Building_stat.num_F++;
+                    Building_stat.num_FF++;
                     break;
                 }
                 case 0x0F:  //Depot neutral
-                {
-                    Building_stat.num_D++;
+                {                    
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 2;  //neutral
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
+                    Building_stat.num_D++;
+                    Building_stat.num_ND++;
                     break;
                 }
                 case 0x10:  //Depot german
-                {
-                    Building_stat.num_D++;
+                {                    
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
+                    Building_stat.num_D++;
+                    Building_stat.num_GD++;
                     break;
                 }
                 case 0x11:  //Depot french
                 {
-                    Building_stat.num_D++;
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
+                    Building_stat.num_D++;
+                    Building_stat.num_FD++;
                     break;
                 }
                 }
@@ -459,14 +494,21 @@ void Create_building_record_from_map()
                     (Field.Unit == 0x3E) ||
                     (Field.Unit == 0x3F)) //Transport)
                 {
-                    Building_stat.num_T++;
-                    if (Field.Unit % 2 == 0)
-                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
-                    else
+                    if ((Field.Unit == 0x2C) || (Field.Unit == 0x34) || (Field.Unit == 0x3E))
+                    {
                         Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
+                        Building_stat.num_GT++;
+                    }
+                    else
+                    {
+                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
+                        Building_stat.num_GT++;
+                    }
+
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 3;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_T;
                     Building_info[Building_stat.num_buildings-1].Properties->Resources = 0;
+                    Building_stat.num_T++;
                 }
 
                 Building_info[Building_stat.num_buildings-1].Properties->Resources = 0;
@@ -481,6 +523,7 @@ void Create_building_record_from_map()
            }
         }
     }
+
 }
 
 
@@ -662,10 +705,12 @@ int Create_shp(std::string shpname)
             for (offset = 0; offset < ((Map.width*Map.height)*2); offset+=2)
             {
                 memcpy(&Field, Map.data + offset, sizeof(Field));
-                if ((Field.Unit == 0x2C) || (Field.Unit == 0x2E) ||
+                if ((Field.Unit == 0x2C) || (Field.Unit == 0x2D) ||
                     (Field.Unit == 0x34) || (Field.Unit == 0x35) ||
                     (Field.Unit == 0x3E) || (Field.Unit == 0x3F))
                 {
+
+
                     index = Get_Buildings_info(offset/2);
                     if (index == -1)
                     {
@@ -675,10 +720,11 @@ int Create_shp(std::string shpname)
 
 
                         //Try to fix the error
-                        if (Field.Unit % 2 == 0)
-                            Bdata.Owner = 1;  //french
-                        else
+                        if ((Field.Unit == 0x2C) || (Field.Unit == 0x34) || (Field.Unit == 0x3E))
                             Bdata.Owner = 0;  //german
+                        else
+                            Bdata.Owner = 1;  //french
+
                         Bdata.Type = 3;
                         Bdata.Index = ti;
                         Bdata.Resources = 0;
@@ -690,7 +736,7 @@ int Create_shp(std::string shpname)
                         Bdata.Units[5] = 0xFF;
                         Bdata.Units[6] = 0xFF;
                         Bdata.Unknown = 0;
-                        IO_result = fwrite(&Bdata,sizeof(Bdata), 1, f); //Write buildings contents
+                        IO_result = fwrite(&Bdata,sizeof(Bdata), 1, f); //Write buildings contents                                              
 
                     }
                     else
@@ -699,11 +745,13 @@ int Create_shp(std::string shpname)
                         IO_result = fwrite(Building_info[index].Properties,sizeof(Building_data), 1, f); //Write buildings contents
                     }
 
-                     if (IO_result != 1)
+                    if (IO_result != 1)
                     {
                         fclose(f);
                         return -2; //Write Error
                     }
+
+
                     ti++;
                 }
             }

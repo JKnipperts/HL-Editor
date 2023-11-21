@@ -4,9 +4,16 @@
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1:
-*  First beta version. All functions of the editor are roughly implemented.
+ * Version info BETA 1.1:
+*  Beta version. All functions of the editor are roughly implemented.
 *  There may still be bugs and tests on different systems are necessary.
+*
+*  Changes to BETA 1.0:
+*  - Fixed bug: When importing a map into the game, SHP data was not saved correctly.
+*  - Fixed bug: Resource income from buildings is now displayed correctly.
+*  - The right mouse button can now also be used to select a field without placing anything directly on it.
+*  - Minor optimizations to the code
+*
 *
 *  Known issues:
 *  - The Codes.dat of History Line contains further attributes for the individual maps that are not yet taken into account by this editor.
@@ -35,6 +42,9 @@
 
 //Global variables and constants:
 
+QString                  Title = "History Line 1914-1918 Editor by Jan Knipperts";
+QString                  Version = "BETA 1.1";
+
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
 QString                  MapDir       = "/MAP";             //Maps should be in the MAP sub directory of the game
@@ -47,8 +57,6 @@ QString                  Partdat_W_name = "/LIB/PARTW.DAT";
 QString                  Unitlib_name = "/LIB/UNIT.LIB";
 QString                  Unitdat_name = "/LIB/UNIT.DAT";
 QString                  Cfg = "/CONFIG.CFG";               //Our config file
-QString                  Title = "History Line 1914-1918 Editor by Jan Knipperts - Version BETA 1";
-
 
 QImage                   MapImage;                          //I use a QImage as Screenbuffer to draw the map
 QImage                   MapImageScaled;                    //Additional buffer for the scaled map image
@@ -106,7 +114,7 @@ MainWindow::MainWindow()
 {
     createActions();
     createMenus();
-    setWindowTitle(Title);
+    setWindowTitle(Title+" - "+Version);
 
     //initialize images and the scroll area
     MapImage = QImage(); //Create a new QImage object for the map image
@@ -344,7 +352,6 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
                 Map.data[(field_pos*2)+1] = (unsigned char) selected_unit;
                 Redraw_Field(hx,hy,selected_tile,selected_unit);
-
                 MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
                 if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
                 Draw_Hexagon(hx,hy,QPen(Qt::red, 1),&MapImageScaled,true,true); //redraw the frame
@@ -356,7 +363,6 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
                 scrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
                 scrollArea->verticalScrollBar()->setValue(pos_y);
-
             }
         }
     }
@@ -366,12 +372,39 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
     {
         if (Map.loaded == true)
         {
-            int pos_x = scrollArea->horizontalScrollBar()->value(); //save scroll position
+            int pos_x = scrollArea->horizontalScrollBar()->value();
             int pos_y = scrollArea->verticalScrollBar()->value();
-            int fx = (event->pos().x()+pos_x) / ((Tilesize-Tileshift)*Scale_factor); // Calc field position from mouse cords
-            int fy = ((event->pos().y()-20)+pos_y) / (Tilesize*Scale_factor); //-20 for menu bar size...
-            int field_pos = (fy*Map.width)+fx;
+            QPoint mouse_pos = scrollArea->mapFromParent(event->pos());
+            mouse_pos = mouse_pos + QPoint(pos_x,pos_y);
 
+            //Calc field position from mouse cords
+            //Thanks to Amit Patel for this elegant solution of a pixel coordinates to hexagon coordinates algorithm!
+            //Source: http://www-cs-students.stanford.edu/~amitp/Articles/GridToHex.html
+
+            int halfsize = Tilesize/2;
+            int mx = mouse_pos.x() / Scale_factor; //Let's leave out the scaling to make things easier
+            int my = mouse_pos.y() / Scale_factor;
+            int hy = my / halfsize;
+            int hx = mx / (Tilesize - Tileshift);
+
+            int diagonale[2][12] = {            //the x values of the diagonals of the hexagon
+                {7,6,6,5,4,4,3,3,2,1,1,0},
+                {0,1,1,2,3,3,4,4,5,6,6,7}
+            };
+
+            if( diagonale[(hy+hx)%2][my %halfsize] >= mx %(Tilesize - Tileshift) ) //We can use the y coordinate (modulo the half row height) as an index into the diagonal
+                hx--;
+
+            hy = ((hy-(hx%2))/2);
+
+            if (hx < 0) hx = 0;  //Just to be save...
+            if (hy < 0) hy = 0;
+
+
+            if ((hx > (Map.width-1)) || (hy > (Map.height-1)))  //Is the field on the map?
+                return;
+
+            int field_pos = (hy*Map.width)+hx;
 
             if (((Map.data[field_pos*2] == 0x01) ||
                  (Map.data[field_pos*2] == 0x02)) || // HQ
@@ -385,21 +418,38 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                  (Map.data[(field_pos*2)+1] == 0x3F))) //Transport
             {
 
-                selected_building = Get_Buildings_info(field_pos);
 
                 if (building_window == NULL)
-                  Create_building_configuration_window(Get_Buildings_info(field_pos));
+                {
+                  selected_building = Get_Buildings_info(field_pos);
+                  Create_building_configuration_window();
+                }
                 else
                 {
                   building_window->close();
-                  Create_building_configuration_window(Get_Buildings_info(field_pos));
+                  selected_building = Get_Buildings_info(field_pos);
+                  Create_building_configuration_window();
                 }
             }
+
+            MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
+            if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
+            Draw_Hexagon(hx,hy,QPen(Qt::red, 1),&MapImageScaled,true,true); //redraw the frame
+
+
+            QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
+            imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
+            scrollArea->setWidget(imageLabel);
+
+            scrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
+            scrollArea->verticalScrollBar()->setValue(pos_y);
 
         }
 
 
     }
+
+
 }
 
 
@@ -532,8 +582,6 @@ void MainWindow::open_diag()
 
             scrollArea->setWidget(imageLabel);
 
-
-
             if (showtilewindowAct->isChecked() == true)
             {
               if (tile_selection == NULL)
@@ -563,7 +611,7 @@ void MainWindow::save_diag()
         Map_file = QFileDialog::getSaveFileName(this,
                                                 tr("Save History Line 1914-1918 map file"),MapDir, tr("HL map files (*.fin)"));
         if (Map_file != "")
-        {
+        {        
             if (Save_Mapdata(Map_file.toStdString().data()) != 0)
             {
               QMessageBox              Errormsg;
@@ -572,11 +620,12 @@ void MainWindow::save_diag()
             }
             QString SHPfile;
             SHPfile = Map_file;
-            SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");
+            SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");       
+
             if (Create_shp(SHPfile.toStdString().data()) != 0)
             {
                 QMessageBox              Errormsg;
-                Errormsg.warning(0,"","I cannot save the building data in "+SHPfile);
+                Errormsg.warning(0,"","I cannot save the building data in "+SHPfile+"!");
                 Errormsg.setFixedSize(500,200);
             }
         }
@@ -762,6 +811,16 @@ void MainWindow::add_diag()
                 return;
             }
 
+            QString SHPfile;
+            SHPfile = Map_file;
+            SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");
+            if (Create_shp(SHPfile.toStdString().data()) != 0)
+            {
+                QMessageBox              Errormsg;
+                Errormsg.warning(0,"","I cannot save the building data in "+SHPfile);
+                Errormsg.setFixedSize(500,200);
+            }
+
             Codefile = (GameDir + Code_name); //Create a C style filename for use of stdio
             Codefile.replace("/'", "\\'");
 
@@ -774,9 +833,7 @@ void MainWindow::add_diag()
             }
 
 
-            QMessageBox Errormsg;
-            Errormsg.information(0,"Map added","Added "+Map_file+" with code "+levelcode);
-            Errormsg.setFixedSize(500,200);
+
         }
     }
     else
@@ -1011,6 +1068,7 @@ void MainWindow::season_diag()
 
 }
 
+
 void MainWindow::flood_diag()
 {
     QMessageBox              Errormsg;
@@ -1092,6 +1150,28 @@ void MainWindow::buildable_units_diag()
     }
 }
 
+
+void MainWindow::map_info_diag()
+{
+    QMessageBox Info;
+    Info.information(0,"Map info:","Total number of buildings:"+QString::number(Building_stat.num_buildings)+QChar('\n')+
+                                   "Number of Headquarters: "+QString::number(Building_stat.num_HQ)+QChar('\n')+
+                                   "German: "+QString::number(Building_stat.num_GHQ)+QChar('\n')+
+                                   "French: "+QString::number(Building_stat.num_FHQ)+QChar('\n')+QChar('\n')+
+                                   "Number of Depots: "+QString::number(Building_stat.num_D)+QChar('\n')+
+                                   "German: "+QString::number(Building_stat.num_GD)+QChar('\n')+
+                                   "French: "+QString::number(Building_stat.num_FD)+QChar('\n')+
+                                   "Neutral: "+QString::number(Building_stat.num_ND)+QChar('\n')+QChar('\n')+
+                                   "Number of Factories: "+QString::number(Building_stat.num_F)+QChar('\n')+
+                                   "German: "+QString::number(Building_stat.num_GF)+QChar('\n')+
+                                   "French: "+QString::number(Building_stat.num_FF)+QChar('\n')+
+                                   "Neutral: "+QString::number(Building_stat.num_NF)+QChar('\n')+QChar('\n')+
+                                   "Number of Transport Units: "+QString::number(Building_stat.num_T)+QChar('\n')+
+                                   "German: "+QString::number(Building_stat.num_GT)+QChar('\n')+
+                                   "French: "+QString::number(Building_stat.num_FT)+QChar('\n'));
+
+}
+
 void MainWindow::createActions()
 {
     newAct = new QAction(tr("&New"), this);
@@ -1152,6 +1232,10 @@ void MainWindow::createActions()
     buildableunitsAct->setStatusTip(tr("Which units can be built in factories?"));
     connect(buildableunitsAct,&QAction::triggered,this,&MainWindow::buildable_units_diag);
 
+    mapinfoAct = new QAction(tr("&Info screen"),this);
+    mapinfoAct->setStatusTip(tr("Shows the number of ressources, units, buildings..."));
+    connect(mapinfoAct,&QAction::triggered,this,&MainWindow::map_info_diag);
+
     setPathAct = new QAction(tr("&Game path"),this);
     setPathAct->setStatusTip(tr("Set path to game resources"));
     connect(setPathAct,&QAction::triggered,this,&MainWindow::setPath_diag);
@@ -1177,6 +1261,7 @@ void MainWindow::createMenus()
     editMenu->addAction(changeseasonAct);
     editMenu->addAction(floodAct);
     editMenu->addAction(buildableunitsAct);
+    editMenu->addAction(mapinfoAct);
     editMenu->addSeparator();
     editMenu->addAction(showgridAct);
     editMenu->addAction(showtilewindowAct);
@@ -1372,10 +1457,12 @@ void buildingwindow::mousePressEvent(QMouseEvent *event)
 }
 
 void buildingwindow::closeEvent(QCloseEvent *event)
-{  
+{
     if (selected_building != -1)
+    {
+        if (RessourceEdit->text().toInt() != Building_info[selected_building].Properties->Resources)
         Building_info[selected_building].Properties->Resources = RessourceEdit->text().toInt();
-
+    }
     event->accept();
 }
 
