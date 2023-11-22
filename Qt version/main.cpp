@@ -13,6 +13,7 @@
 *  - Fixed bug: Resource income from buildings is now displayed correctly.
 *  - The right mouse button can now also be used to select a field without placing anything directly on it.
 *  - Minor optimizations to the code
+*  - Fixed "Using QCharRef with an index pointing outside the valid range of a QString." warning caused by Get_Levelcodes
 *
 *
 *  Known issues:
