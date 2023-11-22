@@ -560,6 +560,7 @@ void MainWindow::newFile_diag()
 
 void MainWindow::open_diag()
 {
+
     Map_file = QFileDialog::getOpenFileName(this,
                                             tr("Open History Line 1914-1918 map file"),MapDir, tr("HL map files (*.fin)"));
     if (Map_file != "")
@@ -599,9 +600,8 @@ void MainWindow::open_diag()
             }
 
         }
+    }
 
-
-    }  
 }
 
 void MainWindow::save_diag()
@@ -1151,27 +1151,6 @@ void MainWindow::buildable_units_diag()
 }
 
 
-void MainWindow::map_info_diag()
-{
-    QMessageBox Info;
-    Info.information(0,"Map info:","Total number of buildings:"+QString::number(Building_stat.num_buildings)+QChar('\n')+
-                                   "Number of Headquarters: "+QString::number(Building_stat.num_HQ)+QChar('\n')+
-                                   "German: "+QString::number(Building_stat.num_GHQ)+QChar('\n')+
-                                   "French: "+QString::number(Building_stat.num_FHQ)+QChar('\n')+QChar('\n')+
-                                   "Number of Depots: "+QString::number(Building_stat.num_D)+QChar('\n')+
-                                   "German: "+QString::number(Building_stat.num_GD)+QChar('\n')+
-                                   "French: "+QString::number(Building_stat.num_FD)+QChar('\n')+
-                                   "Neutral: "+QString::number(Building_stat.num_ND)+QChar('\n')+QChar('\n')+
-                                   "Number of Factories: "+QString::number(Building_stat.num_F)+QChar('\n')+
-                                   "German: "+QString::number(Building_stat.num_GF)+QChar('\n')+
-                                   "French: "+QString::number(Building_stat.num_FF)+QChar('\n')+
-                                   "Neutral: "+QString::number(Building_stat.num_NF)+QChar('\n')+QChar('\n')+
-                                   "Number of Transport Units: "+QString::number(Building_stat.num_T)+QChar('\n')+
-                                   "German: "+QString::number(Building_stat.num_GT)+QChar('\n')+
-                                   "French: "+QString::number(Building_stat.num_FT)+QChar('\n'));
-
-}
-
 void MainWindow::createActions()
 {
     newAct = new QAction(tr("&New"), this);
@@ -1232,10 +1211,6 @@ void MainWindow::createActions()
     buildableunitsAct->setStatusTip(tr("Which units can be built in factories?"));
     connect(buildableunitsAct,&QAction::triggered,this,&MainWindow::buildable_units_diag);
 
-    mapinfoAct = new QAction(tr("&Info screen"),this);
-    mapinfoAct->setStatusTip(tr("Shows the number of ressources, units, buildings..."));
-    connect(mapinfoAct,&QAction::triggered,this,&MainWindow::map_info_diag);
-
     setPathAct = new QAction(tr("&Game path"),this);
     setPathAct->setStatusTip(tr("Set path to game resources"));
     connect(setPathAct,&QAction::triggered,this,&MainWindow::setPath_diag);
@@ -1261,7 +1236,6 @@ void MainWindow::createMenus()
     editMenu->addAction(changeseasonAct);
     editMenu->addAction(floodAct);
     editMenu->addAction(buildableunitsAct);
-    editMenu->addAction(mapinfoAct);
     editMenu->addSeparator();
     editMenu->addAction(showgridAct);
     editMenu->addAction(showtilewindowAct);

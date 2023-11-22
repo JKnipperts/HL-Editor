@@ -136,7 +136,6 @@ int Load_Ressources()
     //Load levelcodes
     C_Filename1 = (GameDir + Code_name); //Create a C style filename for use of stdio
     C_Filename1.replace("/'", "\\'");
-
     if (Get_Levelcodes(C_Filename1.toStdString().data()) != 0)
     {
         Errormsg.critical(0,"Error","Error reading levelcodes!");
@@ -144,7 +143,6 @@ int Load_Ressources()
         Release_Buffers();
         return -1;
     }
-
     Res_loaded = true;
     return 0;
 }

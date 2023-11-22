@@ -1,8 +1,8 @@
 /*
 CODES.H by Jan Knipperts
 Provides all the functions to handle the levelcode file CODES.DAT of History Line 1914-1918
-Version 1.0 - 10.10.2023
-
+Version 1.1 - 22.11.2023
+- fixed "Using QCharRef with an index pointing outside the valid range of a QString."-Warning caused by Get_Levelcodes
 The main features:
 
 Get_Levelcodes
@@ -130,7 +130,7 @@ int Get_Levelcodes(std::string codes_filename)
        for (o = 0; o < 5; o++)
        {
             ASCII = ASCII_buffer[offset+o];
-            code[o] = QChar::fromLatin1(ASCII+48); //17 = "A" in CODES.DAT, 65 (ASCII "A")-17 = 48;
+            code = code + QChar::fromLatin1(ASCII+48); //17 = "A" in CODES.DAT, 65 (ASCII "A")-17 = 48;
        }
        offset = offset+10; //Skip data, we just want the passwords
        Levelcode.Codelist.append(code);

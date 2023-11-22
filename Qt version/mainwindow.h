@@ -40,7 +40,7 @@ private slots:
     void buildable_units_diag();
     void setPath_diag();
     void setScale_diag();
-    void map_info_diag();
+
 
 private:
     void createActions();
@@ -64,7 +64,6 @@ private:
     QAction *showtilewindowAct;
     QAction *showunitwindowAct;
     QAction *mapresizeAct;
-    QAction *mapinfoAct;
     QAction *changeseasonAct;
     QAction *floodAct;
     QAction *buildableunitsAct;
