@@ -334,9 +334,9 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
                     Building_stat.num_T++;
                     if (selected_unit % 2 == 0)
-                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
-                    else
                         Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
+                    else
+                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
 
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 3;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_T;
