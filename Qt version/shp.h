@@ -35,29 +35,11 @@ struct  SHP_struct
 
 struct Building_statistics
 {
-    unsigned char   num_HQ; //number of HQ
-    unsigned char   num_GHQ;
-    unsigned char   num_FHQ;
-
-    unsigned char   num_F;  //number of fabrications
-    unsigned char   num_NF;
-    unsigned char   num_GF;
-    unsigned char   num_FF;
-
-    unsigned char   num_D; //number of depots
-    unsigned char   num_ND;
-    unsigned char   num_GD;
-    unsigned char   num_FD;
-
-    unsigned char   num_T; //number of transport units
-    unsigned char   num_GT;
-    unsigned char   num_FT;
-
-    unsigned char   num_buildings; //total number of buildings
-
-    unsigned char   num_GR;  //Ressource income
-    unsigned char   num_FR;
-
+    unsigned char   num_HQ; //number of HQ    
+    unsigned char   num_F;  //number of fabrications  
+    unsigned char   num_D; //number of depots    
+    unsigned char   num_T; //number of transport units    
+    unsigned char   num_buildings; //total number of buildings    
 };
 
 
@@ -416,8 +398,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 0;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_HQ;
-                    Building_stat.num_HQ++;
-                    Building_stat.num_GHQ++;
+                    Building_stat.num_HQ++;                
                     break;
                 }
                 case 0x02:
@@ -425,8 +406,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 0;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_HQ;
-                    Building_stat.num_HQ++;
-                    Building_stat.num_FHQ++;
+                    Building_stat.num_HQ++;                 
                     break;
                 }
                 case 0x0C:  //Factory neutral
@@ -434,8 +414,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 2;  //neutral
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
-                    Building_stat.num_F++;
-                    Building_stat.num_NF++;
+                    Building_stat.num_F++;              
                     break;
                 }
                 case 0x0D:  //Factory german
@@ -443,8 +422,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
-                    Building_stat.num_F++;
-                    Building_stat.num_GF++;
+                    Building_stat.num_F++;                
                     break;
                 }
                 case 0x0E:  //Factory french
@@ -452,8 +430,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
-                    Building_stat.num_F++;
-                    Building_stat.num_FF++;
+                    Building_stat.num_F++;               
                     break;
                 }
                 case 0x0F:  //Depot neutral
@@ -461,8 +438,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 2;  //neutral
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
-                    Building_stat.num_D++;
-                    Building_stat.num_ND++;
+                    Building_stat.num_D++;                
                     break;
                 }
                 case 0x10:  //Depot german
@@ -470,8 +446,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
-                    Building_stat.num_D++;
-                    Building_stat.num_GD++;
+                    Building_stat.num_D++;                  
                     break;
                 }
                 case 0x11:  //Depot french
@@ -479,8 +454,7 @@ void Create_building_record_from_map()
                     Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
                     Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
-                    Building_stat.num_D++;
-                    Building_stat.num_FD++;
+                    Building_stat.num_D++;               
                     break;
                 }
                 }
@@ -496,13 +470,11 @@ void Create_building_record_from_map()
                 {
                     if ((Field.Unit == 0x2C) || (Field.Unit == 0x34) || (Field.Unit == 0x3E))
                     {
-                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
-                        Building_stat.num_GT++;
+                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german                 
                     }
                     else
                     {
-                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
-                        Building_stat.num_GT++;
+                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french                       
                     }
 
                     Building_info[Building_stat.num_buildings-1].Properties->Type = 3;
