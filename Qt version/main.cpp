@@ -1,12 +1,19 @@
 /*
- * HL Editor Version Beta 1
+ * HL Editor - Beta version 1.2
  * by Jan Knipperts (Dragonsphere /DOSReloaded)
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1.1:
-*  Beta version. All functions of the editor are roughly implemented.
-*  There may still be bugs and tests on different systems are necessary.
+ * Version info BETA 1.2:
+*  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
+*
+*  Changes to BETA 1.1:
+*  - Name of selected unit is shown in the unit selection window
+*  - Fixed bug in handling of not saved transport units in the original game files
+*  - New level codes are being checked
+*  - Query whether unsaved changes should be saved when exiting or reloading
+*  - some small improvements in the code
+*  - New messages. For example, an attempt is made to save and no map has been loaded or created beforehand
 *
 *  Changes to BETA 1.0:
 *  - Fixed bug: When importing a map into the game, SHP data was not saved correctly.
@@ -43,8 +50,9 @@
 
 //Global variables and constants:
 
-QString                  Title = "History Line 1914-1918 Editor by Jan Knipperts";
-QString                  Version = "BETA 1.1";
+QString                  Title = "History Line 1914-1918 Editor";
+QString                  Author = "by Jan Knipperts";
+QString                  Version = "BETA 1.2";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -57,8 +65,8 @@ QString                  Partlib_W_name = "/LIB/PARTW.LIB";   //Game ressource f
 QString                  Partdat_W_name = "/LIB/PARTW.DAT";
 QString                  Unitlib_name = "/LIB/UNIT.LIB";
 QString                  Unitdat_name = "/LIB/UNIT.DAT";
+QString                  Unitdat2_name = "/UNIT.DAT";
 QString                  Cfg = "/CONFIG.CFG";               //Our config file
-
 QImage                   MapImage;                          //I use a QImage as Screenbuffer to draw the map
 QImage                   MapImageScaled;                    //Additional buffer for the scaled map image
 
@@ -84,6 +92,7 @@ QWidget                  *building_window;
 QLineEdit*               RessourceEdit;
 
 QRect                    screenrect;                        //A QRect to save the screen geometry and position windows accordingly.
+QLabel                   *unit_name_text;                   //Text label to display unit name on mouse over
 
 int                      Scale_factor = 2;                  //Default scaling factor for the old VGA bitmaps
 unsigned char            selected_tile = 0x00;              //Define "Plains" as default tile
@@ -93,6 +102,9 @@ bool                     Res_loaded = false;                //to check if bitmap
 bool                     summer = true;                     //set summer as default season for map ressources
 bool                     no_tilechange = false;
 bool                     ocean_map = false;
+bool                     changes = false;
+bool                     already_saved = false;
+
 
 
 
@@ -102,7 +114,9 @@ bool                     ocean_map = false;
 #include "fin.h"
 #include "codes.h"
 #include "shp.h"
+#include "units.h"
 #include "other.h"
+
 
 
 
@@ -115,7 +129,7 @@ MainWindow::MainWindow()
 {
     createActions();
     createMenus();
-    setWindowTitle(Title+" - "+Version);
+    setWindowTitle(Title+" "+Author+" - "+Version);
 
     //initialize images and the scroll area
     MapImage = QImage(); //Create a new QImage object for the map image
@@ -132,9 +146,19 @@ MainWindow::MainWindow()
 
 
 void MainWindow::closeEvent(QCloseEvent *event)
-//Own closeEvent handler to make sure allocated memory will be properly released
+//Own closeEvent handler, primary to make sure allocated memory will be properly released
 
 {
+    if ((Map.loaded == true) && (changes == true))
+    {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, Title, "There are unsaved changes to the map. Do you want to save them?",
+                                      QMessageBox::Yes|QMessageBox::No);
+        if (reply == QMessageBox::Yes)
+            Save();
+    }
+
+
     Release_Buffers();
     event->accept();
 }
@@ -364,6 +388,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
                 scrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
                 scrollArea->verticalScrollBar()->setValue(pos_y);
+                changes = true; //Now there are unsaved changes
             }
         }
     }
@@ -479,6 +504,17 @@ void MainWindow::newFile_diag()
         }
     }
 
+    if ((Map.loaded == true) && (changes == true))
+    {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, Title, "There are unsaved changes to the map. Do you want to save them?",
+                                      QMessageBox::Yes|QMessageBox::No);
+        if (reply == QMessageBox::Yes)
+            Save();
+    }
+
+
+
     if (Map.data != NULL) free(Map.data);
 
     Map.width = 16; //Set default width and height
@@ -556,11 +592,21 @@ void MainWindow::newFile_diag()
         if (Building_info != NULL) free(Building_info);
         if (SHP.buildings != NULL) free(SHP.buildings);
         Building_info = (Building_data_ext*) malloc(sizeof(Building_data_ext));
+        changes = false;
+        already_saved = false;
     }
 }
 
 void MainWindow::open_diag()
 {
+    if ((Map.loaded == true) && (changes == true))
+    {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, Title, "There are unsaved changes to the map. Do you want to save them?",
+                                      QMessageBox::Yes|QMessageBox::No);
+        if (reply == QMessageBox::Yes)
+          Save();
+    }
 
     Map_file = QFileDialog::getOpenFileName(this,
                                             tr("Open History Line 1914-1918 map file"),MapDir, tr("HL map files (*.fin)"));
@@ -600,36 +646,42 @@ void MainWindow::open_diag()
                   unit_selection->show();
             }
 
+            changes = false;
+            already_saved = true;
+
         }
     }
 
 }
 
+
+
 void MainWindow::save_diag()
 {
     if (Map.loaded == true)
+        Save();
+    else
     {
-        Map_file = QFileDialog::getSaveFileName(this,
-                                                tr("Save History Line 1914-1918 map file"),MapDir, tr("HL map files (*.fin)"));
-        if (Map_file != "")
-        {        
-            if (Save_Mapdata(Map_file.toStdString().data()) != 0)
-            {
-              QMessageBox              Errormsg;
-              Errormsg.warning(0,"","I cannot save the map data in "+Map_file);
-              Errormsg.setFixedSize(500,200);
-            }
-            QString SHPfile;
-            SHPfile = Map_file;
-            SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");       
+        QMessageBox              Errormsg;
+        Errormsg.warning(0,"","There's nothing I could save.... Why don't you load a map first or create a new one?");
+        Errormsg.setFixedSize(500,200);
+    }
 
-            if (Create_shp(SHPfile.toStdString().data()) != 0)
-            {
-                QMessageBox              Errormsg;
-                Errormsg.warning(0,"","I cannot save the building data in "+SHPfile+"!");
-                Errormsg.setFixedSize(500,200);
-            }
-        }
+}
+
+
+void MainWindow::saveas_diag()
+{
+    if (Map.loaded == true)
+    {
+        already_saved = false;
+        Save();
+    }
+    else
+    {
+        QMessageBox              Errormsg;
+        Errormsg.warning(0,"","There's nothing I could save.... Why don't you load a map first or create a new one?");
+        Errormsg.setFixedSize(500,200);
     }
 }
 
@@ -753,6 +805,27 @@ void MainWindow::setScale_diag()
 }
 
 
+bool Check_levelcode(QString code)
+{
+    if (code.length() != 5)          //Wrong length for levelcode
+        return false;
+
+    int i;
+
+    for (i = 0; i < code.length(); i++)
+    {
+        if (!code.at(i).isLetter())   //character is no letter
+            return false;
+        if (!code.at(i).toLatin1())   //character is no valid ASCII characer
+            return false;
+    }
+
+    return true;
+
+}
+
+
+
 void MainWindow::add_diag()
 {
     QString Codefile;
@@ -765,7 +838,7 @@ void MainWindow::add_diag()
                                         "", &ok);
         if (ok && !levelcode.isEmpty())
         {
-            if (levelcode.length() != 5)
+            if (!Check_levelcode(levelcode))
             {
               QMessageBox   Errormsg;
               Errormsg.critical(0,"","Code must be five letters to work with the game.");
@@ -833,14 +906,15 @@ void MainWindow::add_diag()
                 return;
             }
 
-
+            changes = false;
+            already_saved = true;
 
         }
     }
     else
     {
         QMessageBox Errormsg;
-        Errormsg.warning(0,"","Please load or create a map first.");
+        Errormsg.warning(0,"","There's nothing I could add to the game.... Why don't you load a map first or create a new one?");
         Errormsg.setFixedSize(500,200);
     }
 }
@@ -1169,6 +1243,10 @@ void MainWindow::createActions()
     saveAct->setStatusTip(tr("Save the map to disk"));
     connect(saveAct, &QAction::triggered, this, &MainWindow::save_diag);
 
+    saveasAct = new QAction(tr("Save as..."), this);
+    saveasAct->setStatusTip(tr("Save the map to a new file"));
+    connect(saveasAct, &QAction::triggered, this, &MainWindow::saveas_diag);
+
     addtogameAct = new QAction(tr("&Add map to game"), this);
     addtogameAct->setStatusTip(tr("Adds your map to the game"));
     connect(addtogameAct, &QAction::triggered, this, &MainWindow::add_diag);
@@ -1193,6 +1271,7 @@ void MainWindow::createActions()
     showunitwindowAct = new QAction(tr("Show unit selection window"), this);
     showunitwindowAct->setCheckable(true);
     showunitwindowAct->setChecked(true);
+
     showunitwindowAct->setStatusTip(tr("Show/Hide the unit selection window"));
     connect(showunitwindowAct,&QAction::triggered,this,&MainWindow::unitwindow_diag);
 
@@ -1228,6 +1307,7 @@ void MainWindow::createMenus()
     fileMenu->addAction(newAct);
     fileMenu->addAction(openAct);
     fileMenu->addAction(saveAct);
+    fileMenu->addAction(saveasAct);
     fileMenu->addAction(addtogameAct);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAct);
@@ -1299,46 +1379,55 @@ void tilelistwindow::mousePressEvent(QMouseEvent *event)
 }
 
 
+
 void unitlistwindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        int pos_x = unitscrollArea->horizontalScrollBar()->value();
-        int pos_y = unitscrollArea->verticalScrollBar()->value();
-        UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor); //Restore original image
-        int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
-        int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
+        if (unitscrollArea->rect().contains(event->pos()))
+        {
+            int pos_x = unitscrollArea->horizontalScrollBar()->value();
+            int pos_y = unitscrollArea->verticalScrollBar()->value();
+            UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor); //Restore original image
+            int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+            int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
 
-        selected_unit = ((fy*10)+fx) * 2;     //Calc correct unit number
-        if (selected_unit >= 120)
-            selected_unit = selected_unit-119; //correction for french units
+            selected_unit = ((fy*10)+fx) * 2;     //Calc correct unit number
 
-        if (selected_unit < (Num_Units*2)) Draw_Hexagon(fx,fy,QPen(Qt::red, 1),&UnitListImageScaled,false,true); //Draw the frame
+            if (selected_unit >= 120)
+                selected_unit = selected_unit-119; //correction for french units
 
-        QLabel *label = new QLabel();
-        label->setPixmap(QPixmap::fromImage(UnitListImageScaled));  //update the image
+            if (selected_unit < (Num_Units*2)) Draw_Hexagon(fx,fy,QPen(Qt::red, 1),&UnitListImageScaled,false,true); //Draw the frame
 
-        unitscrollArea->setWidget(label);
-        unit_selection->update();                           //Update the window contents
-        unitscrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
-        unitscrollArea->verticalScrollBar()->setValue(pos_y);
+            unit_name_text->setText(Unit_Name[selected_unit/2]);
+
+
+            QLabel *label = new QLabel();
+            label->setPixmap(QPixmap::fromImage(UnitListImageScaled));  //update the image
+
+            unitscrollArea->setWidget(label);
+            unit_selection->update();                           //Update the window contents
+            unitscrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
+            unitscrollArea->verticalScrollBar()->setValue(pos_y);
+        }
     }
 
     if (event->button() == Qt::RightButton)
     {
-        int pos_x = unitscrollArea->horizontalScrollBar()->value();
-        int pos_y = unitscrollArea->verticalScrollBar()->value();
-        UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor); //Restore original image
+        if (unitscrollArea->rect().contains(event->pos()))
+        {
+            int pos_x = unitscrollArea->horizontalScrollBar()->value();
+            int pos_y = unitscrollArea->verticalScrollBar()->value();
+            selected_unit = 0xFF;     //No unit selected
 
-        selected_unit = 0xFF;     //No unit selected
+            QLabel *label = new QLabel();
+            label->setPixmap(QPixmap::fromImage(UnitListImageScaled));  //update the image
 
-        QLabel *label = new QLabel();
-        label->setPixmap(QPixmap::fromImage(UnitListImageScaled));  //update the image
-
-        unitscrollArea->setWidget(label);
-        unit_selection->update();                           //Update the window contents
-        unitscrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
-        unitscrollArea->verticalScrollBar()->setValue(pos_y);
+            unitscrollArea->setWidget(label);
+            unit_selection->update();                           //Update the window contents
+            unitscrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
+            unitscrollArea->verticalScrollBar()->setValue(pos_y);
+        }
     }
 }
 
@@ -1347,13 +1436,15 @@ void buildablewindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        int pos_x = buildablescrollArea->horizontalScrollBar()->value();
-        int pos_y = buildablescrollArea->verticalScrollBar()->value();
+       if (buildablescrollArea->rect().contains(event->pos()))
+       {
+         int pos_x = buildablescrollArea->horizontalScrollBar()->value();
+         int pos_y = buildablescrollArea->verticalScrollBar()->value();
 
-        int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
-        int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
+         int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+         int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
 
-        int unit = ((fy*10)+fx);     //Calc correct unit number
+         int unit = ((fy*10)+fx);     //Calc correct unit number
 
 
         if (unit <= Num_Units)
@@ -1396,6 +1487,8 @@ void buildablewindow::mousePressEvent(QMouseEvent *event)
         buildable->update();                           //Update the window contents
         buildablescrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
         buildablescrollArea->verticalScrollBar()->setValue(pos_y);
+        changes = true; //Now there are unsaved changes
+       }
     }
 }
 
@@ -1406,12 +1499,12 @@ void buildingwindow::mousePressEvent(QMouseEvent *event)
 {
     if ((event->button() == Qt::LeftButton) && (selected_building != -1))
     {
-        QPoint mouse_pos = Building_ScrollArea->mapFromParent(event->pos());
 
         //Is the mouse on the ScrollArea (The list of units in the building?)
-        if ((mouse_pos.x() >= 0) &&  (mouse_pos.y() >= 0) &&
-            (mouse_pos.x() < Building_Image_Scaled.width()) && (mouse_pos.y() < Building_Image_Scaled.height()))
+        if (Building_ScrollArea->rect().contains(event->pos()))
         {
+            QPoint mouse_pos = Building_ScrollArea->mapFromParent(event->pos());
+
             int fx = (mouse_pos.x() / Scale_factor) / Tilesize;
 
             Building_info[selected_building].Properties->Units[fx] = selected_unit/2;
@@ -1426,6 +1519,7 @@ void buildingwindow::mousePressEvent(QMouseEvent *event)
             Building_ScrollArea->setWidget(bitmaplabel);
             Building_ScrollArea->update();
             building_window->update();
+            changes = true; //Now there are unsaved changes
         }
     }
 
@@ -1449,12 +1543,15 @@ void buildingwindow::closeEvent(QCloseEvent *event)
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+
     MainWindow               window;
 
     screenrect = app.primaryScreen()->geometry();   //Save screen geometry for window positioning
     window.resize(screenrect.width()/2, screenrect.height() / 2);
     window.move(screenrect.left(),screenrect.top());
     window.show();
+
+
 
     if ((!Read_Config()) || (!Check_for_game_files()))  //Check for config and game files first
     {

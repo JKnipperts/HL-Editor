@@ -13,11 +13,16 @@ SOURCES += \
 
 HEADERS += \
     Lib.h \
+    buildable.h \
+    building.h \
+    codes.h \
     fin.h \
     mainwindow.h \
     other.h \
+    shp.h \
     tilelist.h \
-    unitlist.h
+    unitlist.h \
+    units.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

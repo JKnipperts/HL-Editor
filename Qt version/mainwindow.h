@@ -30,6 +30,7 @@ private slots:
     void newFile_diag();
     void open_diag();
     void save_diag();
+    void saveas_diag();
     void add_diag();
     void grid_diag();
     void tilewindow_diag();
@@ -56,6 +57,7 @@ private:
     QAction *newAct;
     QAction *openAct;
     QAction *saveAct;
+    QAction *saveasAct;
     QAction *addtogameAct;
     QAction *exitAct;
     QAction *setPathAct;

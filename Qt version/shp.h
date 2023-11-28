@@ -1,10 +1,9 @@
 /* SHP.H by Jan Knipperts
 Header file to read and write History Line 1914-1918 map files (*.shp)
 
-Version 1.1 - 21.11.2023
-- Some minor bug fixes
-- Fixed a typo that prevented the recognition of French transport units.
-- Statistics extended by further information
+Version 1.2 - 27.11.2023
+- Fixed handling of not saved transport units in the original game files
+
 */
 
 
@@ -97,8 +96,8 @@ int Read_shp_data(std::string shpname)
             if (SHP.buildings == NULL)  return -4; //Not enough mem?
             memset(SHP.buildings, 0, SHP.num_buildings*sizeof(Building_data));  //Clear
             memcpy(SHP.buildings, TPWM.unpacked_data+sizeof(SHP.can_be_built)+1, SHP.num_buildings*sizeof(Building_data));
-         }
-      }
+        }
+    }
     else
     {
         rewind(f);
@@ -170,7 +169,7 @@ int Read_shp_data(std::string shpname)
 
 void Add_building_positions()
 {
-    int i,offset,hqc,fc,dc,tc,owner;
+    int i,offset,hqc,fc,dc,tc,otc, owner;
 
     offset = 0;
     hqc = 0; //Counter for HQs
@@ -178,11 +177,12 @@ void Add_building_positions()
     dc = 0; //Counter for Depots
     tc = 0; //Counter for transport units
 
-
+    Building_stat.num_buildings = SHP.num_buildings;
 
 
     if ((Map.loaded) && (Building_info != NULL))
     {
+
       for (offset = 0; offset < ((Map.width*Map.height)*2); offset+=2)
       {
             memcpy(&Field, Map.data + offset, sizeof(Field));
@@ -198,7 +198,7 @@ void Add_building_positions()
                         (Building_info[i].Properties->Owner == owner))
                     {
                         Building_info[i].Field = offset/2;
-                        hqc++;
+                        hqc++;                
                         break;
                     }
                 }                               
@@ -230,7 +230,7 @@ void Add_building_positions()
                         (Building_info[i].Properties->Index == fc))
                     {
                         Building_info[i].Field = offset/2;
-                        fc++;
+                        fc++;                
                         break;
                     }
 
@@ -263,19 +263,18 @@ void Add_building_positions()
                         (Building_info[i].Properties->Index == dc))
                     {
                         Building_info[i].Field = offset/2;
-                        dc++;
+                        dc++;                
                         break;
                     }
 
                 }
             }
 
-
             if  ((Field.Unit == 0x2C) ||
                  (Field.Unit == 0x2D))
             {
                 owner = Field.Unit-0x2C;
-
+                otc = tc;
 
                 for (i = 0; i < SHP.num_buildings; i++)
                 {
@@ -289,6 +288,37 @@ void Add_building_positions()
                     }
 
                 }
+
+                // Bluebyte has apparently only saved transport units with content in the SHP files.
+                // For a field with a transport unit without an associated data record, we simply create an empty one.
+
+                if (tc == otc)
+                {
+                    Building_stat.num_buildings++;
+                    if (Building_info != NULL)
+                        Building_info = (Building_data_ext*) realloc(Building_info,Building_stat.num_buildings*sizeof(Building_data_ext));
+                    else
+                        Building_info = (Building_data_ext*) malloc(Building_stat.num_buildings*sizeof(Building_data_ext));
+
+                    Building_info[Building_stat.num_buildings-1].Field = offset/2;
+                    Building_info[Building_stat.num_buildings-1].Properties = (Building_data*) malloc(sizeof(Building_data));
+                    Building_info[Building_stat.num_buildings-1].Properties->Type = 3;
+                    Building_info[Building_stat.num_buildings-1].Properties->Owner = owner;
+                    Building_info[Building_stat.num_buildings-1].Properties->Index = tc;
+                    Building_info[Building_stat.num_buildings-1].Properties->Resources = 0;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[0] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[1] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[2] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[3] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[4] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[5] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[6] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Unknown = 0;
+
+                    tc++;
+                }
+
+
             }
 
 
@@ -296,6 +326,57 @@ void Add_building_positions()
                  (Field.Unit == 0x35))
             {
                 owner = Field.Unit-0x34;
+                otc = tc;
+
+                for (i = 0; i < SHP.num_buildings; i++)
+                {
+                    if ((Building_info[i].Properties->Type == 3) &&
+                        (Building_info[i].Properties->Owner == owner) &&
+                        (Building_info[i].Properties->Index == tc))
+                    {
+                        Building_info[i].Field = offset/2;
+                        tc++;
+                        break;
+                    }                                        
+                }                
+
+                // Bluebyte has apparently only saved transport units with content in the SHP files.
+                // For a field with a transport unit without an associated data record, we simply create an empty one.
+
+                if (tc == otc)
+                {
+                    Building_stat.num_buildings++;
+                    if (Building_info != NULL)
+                        Building_info = (Building_data_ext*) realloc(Building_info,Building_stat.num_buildings*sizeof(Building_data_ext));
+                    else
+                        Building_info = (Building_data_ext*) malloc(Building_stat.num_buildings*sizeof(Building_data_ext));
+
+                    Building_info[Building_stat.num_buildings-1].Field = offset/2;
+                    Building_info[Building_stat.num_buildings-1].Properties = (Building_data*) malloc(sizeof(Building_data));
+                    Building_info[Building_stat.num_buildings-1].Properties->Type = 3;
+                    Building_info[Building_stat.num_buildings-1].Properties->Owner = owner;
+                    Building_info[Building_stat.num_buildings-1].Properties->Index = tc;
+                    Building_info[Building_stat.num_buildings-1].Properties->Resources = 0;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[0] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[1] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[2] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[3] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[4] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[5] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[6] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Unknown = 0;
+
+                    tc++;
+                }
+
+            }
+
+            if  ((Field.Unit == 0x3E) ||
+                 (Field.Unit == 0x3F))
+            {
+                owner = Field.Unit-0x3E;
+                otc = tc;
+
                 for (i = 0; i < SHP.num_buildings; i++)
                 {
                     if ((Building_info[i].Properties->Type == 3) &&
@@ -307,22 +388,35 @@ void Add_building_positions()
                         break;
                     }
                 }
-            }
 
-            if  ((Field.Unit == 0x3E) ||
-                 (Field.Unit == 0x3F))
-            {
-                owner = Field.Unit-0x3E;
-                for (i = 0; i < SHP.num_buildings; i++)
+
+                // Bluebyte has apparently only saved transport units with content in the SHP files.
+                // For a field with a transport unit without an associated data record, we simply create an empty one.
+
+                if (tc == otc)
                 {
-                    if ((Building_info[i].Properties->Type == 3) &&
-                        (Building_info[i].Properties->Owner == owner) &&
-                        (Building_info[i].Properties->Index == tc))
-                    {
-                        Building_info[i].Field = offset/2;
-                        tc++;
-                        break;
-                    }
+                    Building_stat.num_buildings++;
+                    if (Building_info != NULL)
+                        Building_info = (Building_data_ext*) realloc(Building_info,Building_stat.num_buildings*sizeof(Building_data_ext));
+                    else
+                        Building_info = (Building_data_ext*) malloc(Building_stat.num_buildings*sizeof(Building_data_ext));
+
+                    Building_info[Building_stat.num_buildings-1].Field = offset/2;
+                    Building_info[Building_stat.num_buildings-1].Properties = (Building_data*) malloc(sizeof(Building_data));
+                    Building_info[Building_stat.num_buildings-1].Properties->Type = 3;
+                    Building_info[Building_stat.num_buildings-1].Properties->Owner = owner;
+                    Building_info[Building_stat.num_buildings-1].Properties->Index = tc;
+                    Building_info[Building_stat.num_buildings-1].Properties->Resources = 0;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[0] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[1] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[2] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[3] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[4] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[5] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Units[6] = 0xFF;
+                    Building_info[Building_stat.num_buildings-1].Properties->Unknown = 0;
+
+                    tc++;
                 }
             }
         }

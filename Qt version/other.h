@@ -41,6 +41,44 @@ bool Check_for_game_files()
         return true;
 }
 
+
+void Save()
+//Save actual Mapdata
+{
+    if ((already_saved == false) || (Map_file == ""))
+        Map_file = QFileDialog::getSaveFileName(0,"Save History Line 1914-1918 map file",MapDir,"HL map files (*.fin)");
+
+    if (Map_file != "")
+    {
+        if ((!Map_file.contains(".fin")) && (!Map_file.contains(".FIN")))
+         Map_file = Map_file+".FIN";
+
+
+        if (Save_Mapdata(Map_file.toStdString().data()) != 0)
+        {
+            QMessageBox              Errormsg;
+            Errormsg.warning(0,"","I cannot save the map data in "+Map_file);
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+        QString SHPfile;
+        SHPfile = Map_file;
+        SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");
+
+        if (Create_shp(SHPfile.toStdString().data()) != 0)
+        {
+            QMessageBox              Errormsg;
+            Errormsg.warning(0,"","I cannot save the building data in "+SHPfile+"!");
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+        changes = false; //All changes saved
+        already_saved = true;
+    }
+}
+
+
+
 bool Read_Config()
 //Reading the configuration file
 {
@@ -139,6 +177,17 @@ int Load_Ressources()
     if (Get_Levelcodes(C_Filename1.toStdString().data()) != 0)
     {
         Errormsg.critical(0,"Error","Error reading levelcodes!");
+        Errormsg.setFixedSize(500,200);
+        Release_Buffers();
+        return -1;
+    }
+
+    //Read unit names
+    C_Filename1 = (GameDir + Unitdat2_name); //Create a C style filename for use of stdio
+    C_Filename1.replace("/'", "\\'");
+    if (Get_unit_names(C_Filename1.toStdString().data()) != 0)
+    {
+        Errormsg.critical(0,"Error","Error reading unit data!");
         Errormsg.setFixedSize(500,200);
         Release_Buffers();
         return -1;
@@ -332,9 +381,15 @@ void Create_Unitselection_window()
     {
         unit_selection = new unitlistwindow();
         unit_selection->setWindowFlag(Qt::SubWindow);
-        unit_selection->setWindowFlags(Qt::WindowStaysOnTopHint);
+        unit_selection ->setWindowFlags(Qt::WindowStaysOnTopHint);
+
         unit_selection->resize(((11*Tilesize)*Scale_factor)+10, (2*((Num_Units/10)+1)*Tilesize)*Scale_factor);
         unit_selection->setWindowTitle("Unit selection");
+        unit_selection->setMouseTracking(true);
+
+        unit_name_text = new QLabel();
+        unit_name_text->setText("");
+
 
         UnitListImage = QImage((10*Tilesize),2*((Num_Units/10)+1)*Tilesize, QImage::Format_RGB16); //Create a new QImage object for the tile list
         UnitListImage.fill(Qt::transparent);
@@ -370,16 +425,18 @@ void Create_Unitselection_window()
         UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor); //Create a scaled version of it
 
         QLabel *label = new QLabel();
-        QHBoxLayout *layout = new QHBoxLayout();
         label->setPixmap(QPixmap::fromImage(UnitListImageScaled));
 
         unitscrollArea = new(QScrollArea);
         unitscrollArea->setBackgroundRole(QPalette::Dark);
         unitscrollArea->setWidget(label);
         unitscrollArea->setVisible(true);
-        layout->addWidget(unitscrollArea);
-        unit_selection->setLayout(layout);
 
+        QVBoxLayout *layout = new QVBoxLayout();
+        layout->addWidget(unitscrollArea);
+        layout->addWidget(unit_name_text);
+
+        unit_selection->setLayout(layout);
         unit_selection->move(screenrect.width()/2, screenrect.bottom()/2);
 
         unit_selection->show();
