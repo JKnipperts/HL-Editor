@@ -1,4 +1,5 @@
 Qt version of the History Line 1914-1918 editor
 11/20/2023 - I have completed a first beta version in which all functions have been implemented but not yet sufficiently tested.
-EXE file is included this time.
+EXE file is included (without Qt's dll files).
 11/22/2023 - Fixed some nasty bugs from the first beta version. Source code and provided EXE file updated to version beta 1.1
+11/28/2023 - Files have been updated to beta 1.2. See comments at the beginning of main.cpp for a detailed changelog
