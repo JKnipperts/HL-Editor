@@ -48,7 +48,7 @@ void Save()
     if ((already_saved == false) || (Map_file == ""))
         Map_file = QFileDialog::getSaveFileName(0,"Save History Line 1914-1918 map file",MapDir,"HL map files (*.fin)");
 
-    if (Map_file != "")
+    if (!Map_file.isEmpty() && !Map_file.isNull())
     {
         if ((!Map_file.contains(".fin")) && (!Map_file.contains(".FIN")))
          Map_file = Map_file+".FIN";
@@ -125,6 +125,7 @@ int Load_Ressources()
     C_Filename2 = (GameDir + Unitdat_name);
     C_Filename2.replace("/", "\\");
 
+
     if (Load_Unit_files(C_Filename1.toStdString().data(),C_Filename2.toStdString().data()) != 0)
     {
         Errormsg.critical(0,"Error","Error loading unit files!");
@@ -132,6 +133,7 @@ int Load_Ressources()
         Release_Buffers();
         return -1;
     }
+
 
     //Load part/terrain bitmaps
 
@@ -558,8 +560,16 @@ void Create_building_configuration_window()
             Building_Image_Scaled = Building_Image.scaled(Building_Image.width()*Scale_factor,Building_Image.height()*Scale_factor); //Create a scaled version of it
 
             for (int i = 0; i < 7; i++)
-                Draw_Hexagon(i,0,QPen(Qt::white, 1),&Building_Image_Scaled,false,true);
-
+            {
+                    QPainter painter(&Building_Image_Scaled);
+                    QPen pen;
+                    pen.setWidth(1);
+                    pen.setColor(Qt::white);
+                    painter.setPen(pen);
+                    QRect R((i*Tilesize)*Scale_factor,0,((i*Tilesize)+Tilesize)*Scale_factor,Building_Image_Scaled.height()-1);
+                    painter.drawRect(R);
+                    painter.end();
+            }
             QLabel *textlabel1 = new QLabel();
             textlabel1->setText("Units in the building:");
             QLabel *textlabel2 = new QLabel();

@@ -1,11 +1,19 @@
 /*
- * HL Editor - Beta version 1.2
+ * HL Editor - Beta version 1.3
  * by Jan Knipperts (Dragonsphere /DOSReloaded)
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1.2:
+ * Version info BETA 1.3:
 *  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
+*
+*  Changes to BETA 1.2:
+*  - Units in buildings can now be removed with the right mouse button
+*  - Fields for units in buildings are now rectangular to make them clearer
+*  - Fixed a bug that prevented changing the map size in some cases
+*  - Improved handling of the cancel button for QFileDialogs
+*  - If the scaling factor is changed, the child windows are now also redrawn accordingly
+*  - Reference to beta version and greetings added
 *
 *  Changes to BETA 1.1:
 *  - Name of selected unit is shown in the unit selection window
@@ -28,7 +36,6 @@
 *    New maps are only added to the game as two-player maps.
 *  - File access in the main program runs in the main program via Qt / QFile routines, but in some header files still via the standard C routines or fopen_s.
 *    File and directory names are not case-sensitive. This would have to be adapted for Linux compatibility.
-*  - No check whether passwords contain only letters, whether files are overwritten or the file name is correct, etc.
 *
 */
 
@@ -52,7 +59,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "BETA 1.2";
+QString                  Version = "BETA 1.3";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -133,14 +140,24 @@ MainWindow::MainWindow()
 
     //initialize images and the scroll area
     MapImage = QImage(); //Create a new QImage object for the map image
-    MapImageScaled =QImage(); //Create a scaled version of it
-    QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
-    imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
+    MapImageScaled = QImage(); //100,100,QImage::Format_RGB16); //Create a scaled version of it
+
+    QLabel *BetaWarning = new QLabel();
+    BetaWarning->setText("<br> <br> <br><font color='white'>This is a Beta Version! Warning of bugs and drastic changes between versions. </font> <br> <br>"
+                         "<font color='black'>Greetings to the dosreloaded community and thanks to everyone who supports this project. <br>"
+                         "My special thanks go to llm for his help in reverse engineering the game files and to tbc21 for beta testing.</font>");
+
     scrollArea = new(QScrollArea);
     scrollArea->setBackgroundRole(QPalette::Dark);
-    scrollArea->setWidget(imageLabel);
+    scrollArea->setWidget(BetaWarning);
     scrollArea->setVisible(true);
+
+
     setCentralWidget(scrollArea);
+
+
+
+
 }
 
 
@@ -493,8 +510,12 @@ void MainWindow::contextMenuEvent(QContextMenuEvent *event)
 
 void MainWindow::newFile_diag()
 {
+
+
+
     if (!Res_loaded)
     {
+
         if (Load_Ressources() != 0)
         {
             QMessageBox              Errormsg;
@@ -502,6 +523,7 @@ void MainWindow::newFile_diag()
             Errormsg.setFixedSize(500,200);
             return;
         }
+
     }
 
     if ((Map.loaded == true) && (changes == true))
@@ -610,7 +632,8 @@ void MainWindow::open_diag()
 
     Map_file = QFileDialog::getOpenFileName(this,
                                             tr("Open History Line 1914-1918 map file"),MapDir, tr("HL map files (*.fin)"));
-    if (Map_file != "")
+
+    if (!Map_file.isEmpty() && !Map_file.isNull())
     {
         if (Res_loaded == false)
         {
@@ -747,32 +770,34 @@ void MainWindow::setPath_diag()
                                                 QFileDialog::ShowDirsOnly
                                                     | QFileDialog::DontResolveSymlinks);
 
-    if (!Check_for_game_files())
+    if (!GameDir.isEmpty() && !GameDir.isNull())
     {
-        QMessageBox              Errormsg;
-        Errormsg.warning(0,"","I cannot find the required game files in the selected directory!");
-        Errormsg.setFixedSize(500,200);
-    }
-    else
-    {
-
-        QFile cfgFile(dir.currentPath()+Cfg);
-        cfgFile.open(QIODevice::WriteOnly);
-
-        if (!cfgFile.isOpen())
+        if (!Check_for_game_files())
         {
             QMessageBox              Errormsg;
-            Errormsg.warning(0,"","I cannot save the configuration file!");
+            Errormsg.warning(0,"","I cannot find the required game files in the selected directory!");
             Errormsg.setFixedSize(500,200);
         }
         else
         {
-            QTextStream out(&cfgFile);
-            out << GameDir + "\n";
-            out << Scale_factor;
-            cfgFile.close();
+            QFile cfgFile(dir.currentPath()+Cfg);
+            cfgFile.open(QIODevice::WriteOnly);
 
-            MapDir = GameDir+MapDir;
+            if (!cfgFile.isOpen())
+            {
+                QMessageBox              Errormsg;
+                Errormsg.warning(0,"","I cannot save the configuration file!");
+                Errormsg.setFixedSize(500,200);
+            }
+            else
+            {
+                QTextStream out(&cfgFile);
+                out << GameDir + "\n";
+                out << Scale_factor;
+                cfgFile.close();
+
+                MapDir = GameDir+MapDir;
+            }
         }
 
     }
@@ -796,10 +821,35 @@ void MainWindow::setScale_diag()
     if (ok)
     {
         if (Scale_factor < 1) Scale_factor = 1;
+
         MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor);
+        if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
+
         QLabel *imageLabel = new QLabel;
         imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
         scrollArea->setWidget(imageLabel);
+
+        //Scale and update the child window contents
+
+        if (showunitwindowAct->isChecked() == true)
+        {
+            UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor);
+            QLabel *imageLabel1 = new QLabel;
+            imageLabel1->setPixmap(QPixmap::fromImage(UnitListImageScaled));
+            unitscrollArea->setWidget(imageLabel1);
+            unit_selection->update();
+        }
+
+        if (showtilewindowAct->isChecked() == true)
+        {
+            TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor);
+            QLabel *imageLabel2 = new QLabel;
+            imageLabel2->setPixmap(QPixmap::fromImage(TileListImageScaled));
+            tilescrollArea->setWidget(imageLabel2);
+            tile_selection->update();
+        }
+
+
     }
 
 }
@@ -952,16 +1002,22 @@ void MainWindow::map_resize_diag()
     if ((Map.width == 16) && (Map.height == 24)) current = 1;
     if ((Map.width == 16) && (Map.height == 32)) current = 2;
     if ((Map.width == 16) && (Map.height == 40)) current = 3;
+
     if ((Map.width == 24) && (Map.height == 24)) current = 4;
     if ((Map.width == 24) && (Map.height == 32)) current = 5;
+
     if ((Map.width == 32) && (Map.height == 24)) current = 6;
     if ((Map.width == 32) && (Map.height == 32)) current = 7;
     if ((Map.width == 32) && (Map.height == 48)) current = 8;
-    if ((Map.width == 40) && (Map.height == 40)) current = 9;
-    if ((Map.width == 48) && (Map.height == 64)) current = 10;
-    if ((Map.width == 64) && (Map.height == 24)) current = 11;
-    if ((Map.width == 64) && (Map.height == 32)) current = 12;
-    if ((Map.width == 64) && (Map.height == 48)) current = 13;
+
+    if ((Map.width == 40) && (Map.height == 32)) current = 9;
+    if ((Map.width == 40) && (Map.height == 40)) current = 10;
+
+    if ((Map.width == 48) && (Map.height == 64)) current = 11;
+
+    if ((Map.width == 64) && (Map.height == 24)) current = 12;
+    if ((Map.width == 64) && (Map.height == 32)) current = 13;
+    if ((Map.width == 64) && (Map.height == 48)) current = 14;
 
 
     QString item = QInputDialog::getItem(this, tr("Select map size"),
@@ -978,6 +1034,7 @@ void MainWindow::map_resize_diag()
         if (item == "32x24"){ width = 32;height = 24;}
         if (item == "32x32"){ width = 32;height = 32;}
         if (item == "32x48"){ width = 32;height = 48;}
+        if (item == "40x32"){ width = 40;height = 32;}
         if (item == "40x40"){ width = 40;height = 40;}
         if (item == "48x64"){ width = 48;height = 64;}
         if (item == "64x24"){ width = 64;height = 24;}
@@ -1389,7 +1446,7 @@ void unitlistwindow::mousePressEvent(QMouseEvent *event)
             int pos_x = unitscrollArea->horizontalScrollBar()->value();
             int pos_y = unitscrollArea->verticalScrollBar()->value();
             UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor); //Restore original image
-            int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+             int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
             int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
 
             selected_unit = ((fy*10)+fx) * 2;     //Calc correct unit number
@@ -1500,27 +1557,87 @@ void buildingwindow::mousePressEvent(QMouseEvent *event)
     if ((event->button() == Qt::LeftButton) && (selected_building != -1))
     {
 
-        //Is the mouse on the ScrollArea (The list of units in the building?)
-        if (Building_ScrollArea->rect().contains(event->pos()))
+       //Is the mouse on the ScrollArea (The list of units in the building?)
+       if (Building_ScrollArea->rect().contains(event->pos()))
+       {
+       // QPoint mouse_pos = Building_ScrollArea->mapFromParent(event->pos());
+
+        int fx = (event->pos().x() / Scale_factor) / Tilesize;
+
+        Building_info[selected_building].Properties->Units[fx] = selected_unit/2;
+
+        QPainter painter(&Building_Image);
+        QPen pen;
+
+        pen.setWidth(Tilesize);
+        pen.setColor(Qt::black);
+        painter.setPen(pen);
+        painter.drawPoint((fx*Tilesize)+(Tilesize/2),(Tilesize/2));
+        painter.end();
+
+        Draw_Unit(fx*Tilesize, 0,(Building_info[selected_building].Properties->Units[fx] * 6) , Building_info[selected_building].Properties->Owner+1, &Building_Image);
+        Building_Image_Scaled = Building_Image.scaled(Building_Image.width()*Scale_factor,Building_Image.height()*Scale_factor); //Create a scaled version of it
+
+        for (int i = 0; i < 7; i++)
         {
-            QPoint mouse_pos = Building_ScrollArea->mapFromParent(event->pos());
-
-            int fx = (mouse_pos.x() / Scale_factor) / Tilesize;
-
-            Building_info[selected_building].Properties->Units[fx] = selected_unit/2;
-
-            Draw_Unit(fx*Tilesize, 0,(Building_info[selected_building].Properties->Units[fx] * 6) , Building_info[selected_building].Properties->Owner+1, &Building_Image);
-            Building_Image_Scaled = Building_Image.scaled(Building_Image.width()*Scale_factor,Building_Image.height()*Scale_factor); //Create a scaled version of it
-            for (int i = 0; i < 7; i++)
-            Draw_Hexagon(i,0,QPen(Qt::white, 1),&Building_Image_Scaled,false,true);
-
-            QLabel *bitmaplabel = new QLabel();
-            bitmaplabel->setPixmap(QPixmap::fromImage(Building_Image_Scaled));
-            Building_ScrollArea->setWidget(bitmaplabel);
-            Building_ScrollArea->update();
-            building_window->update();
-            changes = true; //Now there are unsaved changes
+            QPainter painter(&Building_Image_Scaled);
+            pen.setWidth(1);
+            pen.setColor(Qt::white);
+            painter.setPen(pen);
+            QRect R((i*Tilesize)*Scale_factor,0,((i*Tilesize)+Tilesize)*Scale_factor,Building_Image_Scaled.height()-1);
+            painter.drawRect(R);
+            painter.end();
         }
+
+
+        QLabel *bitmaplabel = new QLabel();
+        bitmaplabel->setPixmap(QPixmap::fromImage(Building_Image_Scaled));
+        Building_ScrollArea->setWidget(bitmaplabel);
+        Building_ScrollArea->update();
+        building_window->update();
+        changes = true; //Now there are unsaved changes
+       }
+    }
+
+    if ((event->button() == Qt::RightButton) && (selected_building != -1))
+    {
+
+       //Is the mouse on the ScrollArea (The list of units in the building?)
+       if (Building_ScrollArea->rect().contains(event->pos()))
+       {
+        QPoint mouse_pos = Building_ScrollArea->mapFromParent(event->pos());
+
+        int fx = (mouse_pos.x() / Scale_factor) / Tilesize;
+
+        Building_info[selected_building].Properties->Units[fx] = 0xFF;
+        QPainter painter(&Building_Image);
+        QPen pen;
+        pen.setWidth(Tilesize);
+        pen.setColor(Qt::black);
+        painter.setPen(pen);
+        painter.drawPoint((fx*Tilesize)+(Tilesize/2),(Tilesize/2));
+        painter.end();
+
+        Building_Image_Scaled = Building_Image.scaled(Building_Image.width()*Scale_factor,Building_Image.height()*Scale_factor); //Create a scaled version of it
+        for (int i = 0; i < 7; i++)
+        {
+            QPainter painter(&Building_Image_Scaled);
+            QPen pen;
+            pen.setWidth(1);
+            pen.setColor(Qt::white);
+            painter.setPen(pen);
+            QRect R((i*Tilesize)*Scale_factor,0,((i*Tilesize)+Tilesize)*Scale_factor,Building_Image_Scaled.height()-1);
+            painter.drawRect(R);
+            painter.end();
+        }
+
+        QLabel *bitmaplabel = new QLabel();
+        bitmaplabel->setPixmap(QPixmap::fromImage(Building_Image_Scaled));
+        Building_ScrollArea->setWidget(bitmaplabel);
+        Building_ScrollArea->update();
+        building_window->update();
+        changes = true; //Now there are unsaved changes
+       }
     }
 
 }

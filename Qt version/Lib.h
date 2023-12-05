@@ -187,13 +187,14 @@ int TPWM_Unpack()
 				inofs++;
 
 				distance = (unsigned int)((b1 & 0xF0) << 4) | b2;
+                if (distance > outofs) break;
 				length = (unsigned int)(b1 & 0x0F) + 3;
 
 				for (i = 0; i <= (length - 1); i++)
 				{
 					TPWM.unpacked_data[outofs] = TPWM.unpacked_data[(outofs - distance)];
 					outofs++;
-                    if (outofs >= TPWM.unpacked_size) break;
+                    if (outofs > TPWM.unpacked_size) break;
 				}
 			}
 			else
@@ -202,11 +203,17 @@ int TPWM_Unpack()
 				inofs++;
                 if (inofs > TPWM.packed_size) break;
 
+
 				outofs++;
                 if (outofs > TPWM.unpacked_size) break;
+
 			}
         }
+
     }
+
+
+
 
 	if (outofs >= TPWM.unpacked_size)
 		return 0;
@@ -221,10 +228,13 @@ int Unpack_file(FILE* f)
 {
 	size_t 				IO_result;
 
+
     if (!f) return -1;
 
-	fseek(f, 0, SEEK_END);	//Get file size
-	TPWM.packed_size = ftell(f) - 8;	
+    fseek(f, 0, SEEK_END);	//Get file size
+
+    TPWM.packed_size = ftell(f) - 8;
+
 	rewind(f);
 	fseek(f, 4, SEEK_SET);
 
@@ -234,15 +244,17 @@ int Unpack_file(FILE* f)
 	{
 		fclose(f);
 		return -2;
-	}
-		
-    if ((TPWM.packed_data = (unsigned char*)malloc(TPWM.packed_size)) == NULL) //Reserve memory buffer for packed data
+    }
+
+
+    if ((TPWM.packed_data = (unsigned char*)malloc(TPWM.packed_size+1)) == NULL) //Reserve memory buffer for packed data (+1needed for 32 bit release)
 	{
 		fclose(f);
         return -4;
 	}
 
-	memset(TPWM.packed_data, 0, TPWM.packed_size);  //Clear it;
+
+    memset(TPWM.packed_data, 0, TPWM.packed_size+1);  //Clear it;
 
 	IO_result = fread(TPWM.packed_data, TPWM.packed_size, 1, f); //Read packed dara
 
@@ -255,12 +267,14 @@ int Unpack_file(FILE* f)
 	
     fclose(f);
 
-    if ((TPWM.unpacked_data = (unsigned char*)malloc(TPWM.unpacked_size)) == NULL) //Reserve memory buffer for unpacked data
+    if ((TPWM.unpacked_data = (unsigned char*)malloc(TPWM.unpacked_size+1)) == NULL) //Reserve memory buffer for unpacked data (+1needed for 32 bit release)
 	{
 		free(TPWM.packed_data);
 		return -4;
 	}
+
     memset(TPWM.unpacked_data, 0, TPWM.unpacked_size);  //Clear it;
+
 
 
 	if (TPWM_Unpack() != 0)		
@@ -270,6 +284,7 @@ int Unpack_file(FILE* f)
 
         return -5;	//Decompression failed
 	}
+
 
 	free(TPWM.packed_data); //Free buffer for packed data - we don't need it anymore
 	return 0;
@@ -543,6 +558,9 @@ int Load_Unit_files(std::string unitlib_filename,std::string unitdat_filename)
     size_t                      IO_result;
     unsigned int				fsize;
 
+
+
+
 	fopen_s(&f, unitlib_filename.data(), "rb");
 
 	if (!f)
@@ -564,15 +582,18 @@ int Load_Unit_files(std::string unitlib_filename,std::string unitdat_filename)
 	}
 
 
+
+
 	if (ID == 0x4D575054) //"TPWM" string?
 	{
-		//Yes, so file is TPWM packed
+        //Yes, so file is TPWM packed
 
 		if (Unpack_file(f) != 0)
 		{
 			free(TPWM.unpacked_data);
 			return -5;		//Decompressing failed!
 		}
+
 
 		memcpy(&Unitlib.index_offset, TPWM.unpacked_data, sizeof(Unitlib.index_offset)); //Get index offset
 
