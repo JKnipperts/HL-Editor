@@ -7,3 +7,4 @@ EXE file (x64) is now included (without Qt's dll files).
 11/22/2023 - Fixed some nasty bugs from the first beta version. Source code and provided EXE file updated to version beta 1.1
 11/28/2023 - Files have been updated to beta 1.2. See comments at the beginning of main.cpp for a detailed changelog
 12/05/2023 - Released beta 1.3
+12/18/2023 - Released beta 1.4
