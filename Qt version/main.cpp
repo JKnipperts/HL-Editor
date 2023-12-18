@@ -4,8 +4,14 @@
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1.3:
+ * Version info BETA 1.31:
 *  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
+*
+*  Changes to BETA 1.3
+*  - Fixed a bug in TPWM_unpack that caused writing attempts outside the buffer in some cases.
+*  - When creating a new map, you will now be asked whether it should be created as an ocean or a land map.
+*  - Optimized accuracy when selecting or placing fields or units with the mouse
+*  - For Linux compatibility, a separate check is now also carried out for lower-case file names when loading the game files.
 *
 *  Changes to BETA 1.2:
 *  - Units in buildings can now be removed with the right mouse button
@@ -30,12 +36,10 @@
 *  - Minor optimizations to the code
 *  - Fixed "Using QCharRef with an index pointing outside the valid range of a QString." warning caused by Get_Levelcodes
 *
-*
 *  Known issues:
 *  - The Codes.dat of History Line contains further attributes for the individual maps that are not yet taken into account by this editor.
 *    New maps are only added to the game as two-player maps.
 *  - File access in the main program runs in the main program via Qt / QFile routines, but in some header files still via the standard C routines or fopen_s.
-*    File and directory names are not case-sensitive. This would have to be adapted for Linux compatibility.
 *
 */
 
@@ -49,17 +53,19 @@
 #include <QInputDialog>
 #include <QScrollArea>
 #include <QMouseEvent>
+#include  <QPushButton>
 #include "tilelist.h"
 #include "unitlist.h"
 #include "buildable.h"
 #include "building.h"
+#include "replace.h"
 
 
 //Global variables and constants:
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "BETA 1.3";
+QString                  Version = "BETA 1.31";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -74,8 +80,13 @@ QString                  Unitlib_name = "/LIB/UNIT.LIB";
 QString                  Unitdat_name = "/LIB/UNIT.DAT";
 QString                  Unitdat2_name = "/UNIT.DAT";
 QString                  Cfg = "/CONFIG.CFG";               //Our config file
+
+
+
 QImage                   MapImage;                          //I use a QImage as Screenbuffer to draw the map
 QImage                   MapImageScaled;                    //Additional buffer for the scaled map image
+QScrollArea              *scrollArea;
+
 
 QImage                   TileListImage;                     //Screenbuffer for the tile selection child window
 QImage                   TileListImageScaled;               //Additional buffer for the scaled map image
@@ -98,6 +109,14 @@ QScrollArea              *Building_ScrollArea;
 QWidget                  *building_window;
 QLineEdit*               RessourceEdit;
 
+QWidget                  *replacedlg;
+QImage                   tile_image1;
+QLabel                   *Tile1;
+QImage                   tile_image2;
+QLabel                   *Tile2;
+QPushButton              *ok_button;
+unsigned char            r1,r2;
+
 QRect                    screenrect;                        //A QRect to save the screen geometry and position windows accordingly.
 QLabel                   *unit_name_text;                   //Text label to display unit name on mouse over
 
@@ -108,10 +127,10 @@ int                      selected_building = -1;            //No building is sel
 bool                     Res_loaded = false;                //to check if bitmaps have already been loaded into memory
 bool                     summer = true;                     //set summer as default season for map ressources
 bool                     no_tilechange = false;
-bool                     ocean_map = false;
 bool                     changes = false;
 bool                     already_saved = false;
-
+bool                     replace_accepted = false;
+bool                     grid_enabled = true;
 
 
 
@@ -152,12 +171,7 @@ MainWindow::MainWindow()
     scrollArea->setWidget(BetaWarning);
     scrollArea->setVisible(true);
 
-
     setCentralWidget(scrollArea);
-
-
-
-
 }
 
 
@@ -510,9 +524,6 @@ void MainWindow::contextMenuEvent(QContextMenuEvent *event)
 
 void MainWindow::newFile_diag()
 {
-
-
-
     if (!Res_loaded)
     {
 
@@ -536,7 +547,6 @@ void MainWindow::newFile_diag()
     }
 
 
-
     if (Map.data != NULL) free(Map.data);
 
     Map.width = 16; //Set default width and height
@@ -553,6 +563,21 @@ void MainWindow::newFile_diag()
     }
     else
     {
+
+        unsigned char tile;
+
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, Title, "Do you want to create an ocean map?",
+                                      QMessageBox::Yes|QMessageBox::No);
+        if (reply == QMessageBox::Yes)
+        {
+            tile = 0x30;
+        }
+        else
+        {
+            tile = 0x00;
+        }
+
         int x,y,o;
         o = 0;
         for (y = 1; y <= Map.height; y++)
@@ -566,7 +591,7 @@ void MainWindow::newFile_diag()
               }
               else
               {
-                  Map.data[o] =  0x00;
+                  Map.data[o] =  tile;
                   Map.data[o+1] =  0xFF;
               }
 
@@ -614,7 +639,7 @@ void MainWindow::newFile_diag()
         if (Building_info != NULL) free(Building_info);
         if (SHP.buildings != NULL) free(SHP.buildings);
         Building_info = (Building_data_ext*) malloc(sizeof(Building_data_ext));
-        changes = false;
+        changes = true;
         already_saved = false;
     }
 }
@@ -715,10 +740,12 @@ void MainWindow::grid_diag()
     if(showgridAct->isChecked())
     {
         ShowGrid();  //Draw a Hexfield-Grid
+        grid_enabled = true;
     }
     else
     {
         MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor);
+        grid_enabled = false;
     }
 
     QLabel *imageLabel = new QLabel;     //Update the scrollArea
@@ -1201,58 +1228,12 @@ void MainWindow::season_diag()
 }
 
 
-void MainWindow::flood_diag()
+void MainWindow::replace_diag()
 {
-    QMessageBox              Errormsg;
-    int                      x,y,offset;
-    field_info               fielddata;
-
     if (Map.loaded == true)
     {
-        if (!ocean_map)
-            ocean_map = true;
-        else
-            ocean_map = false;
+        Create_replace_tile_diag();
 
-
-
-
-        offset = 0;
-        for (y = 0; y < Map.height; y++)
-        {
-            for (x = 0; x < Map.width; x++)
-            {
-                memcpy(&fielddata, Map.data + offset, sizeof(fielddata));
-                if (ocean_map)
-                {
-                    if (fielddata.Part == 0x00)
-                    {
-                        fielddata.Part = 0x2F; //Change plains to deep water
-                        memcpy(Map.data + offset,&fielddata, sizeof(fielddata));
-                     }
-                }
-                else
-                {
-                    if (fielddata.Part == 0x2F)
-                    {
-                       fielddata.Part = 0x00; //Change deep water to plains
-                       memcpy(Map.data + offset,&fielddata, sizeof(fielddata));
-                    }
-                }
-                offset = offset + sizeof(Field);
-            }
-        }
-
-
-
-        MapImage.fill(Qt::transparent);
-        Draw_Map(); //redraw the mapimage
-
-        MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
-        if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
-        QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
-        imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
-        scrollArea->setWidget(imageLabel);
 
     }
     else
@@ -1340,9 +1321,9 @@ void MainWindow::createActions()
     changeseasonAct->setStatusTip(tr("Map plays in summer or in winter"));
     connect(changeseasonAct,&QAction::triggered,this,&MainWindow::season_diag);
 
-    floodAct = new QAction(tr("Flood/dry map"),this);
-    floodAct->setStatusTip(tr("Ocean or ground map?"));
-    connect(floodAct,&QAction::triggered,this,&MainWindow::flood_diag);
+    replaceAct = new QAction(tr("Replace tile"),this);
+    replaceAct->setStatusTip(tr("Replaces one tile with another"));
+    connect(replaceAct,&QAction::triggered,this,&MainWindow::replace_diag);
 
     buildableunitsAct = new QAction(tr("Set buildable units"),this);
     buildableunitsAct->setStatusTip(tr("Which units can be built in factories?"));
@@ -1372,7 +1353,7 @@ void MainWindow::createMenus()
     editMenu =  menuBar()->addMenu(tr("&Edit"));
     editMenu->addAction(mapresizeAct);
     editMenu->addAction(changeseasonAct);
-    editMenu->addAction(floodAct);
+    editMenu->addAction(replaceAct);
     editMenu->addAction(buildableunitsAct);
     editMenu->addSeparator();
     editMenu->addAction(showgridAct);
@@ -1396,8 +1377,9 @@ void tilelistwindow::mousePressEvent(QMouseEvent *event)
         int pos_x = tilescrollArea->horizontalScrollBar()->value();
         int pos_y = tilescrollArea->verticalScrollBar()->value();
         TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Restore original image
-        int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
-        int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
+        QRect widgetRect = tilescrollArea->geometry();
+        int fx = (event->pos().x()-widgetRect.left()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+        int fy = (event->pos().y()-widgetRect.top()+pos_y) / (Tilesize*Scale_factor);
 
         if (((fy*10)+fx) <= Num_Parts-1)
         {
@@ -1421,7 +1403,7 @@ void tilelistwindow::mousePressEvent(QMouseEvent *event)
         int pos_x = tilescrollArea->horizontalScrollBar()->value();
         int pos_y = tilescrollArea->verticalScrollBar()->value();
         TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Restore original image
-        QLabel *label = new QLabel();
+         QLabel *label = new QLabel();
         label->setPixmap(QPixmap::fromImage(TileListImageScaled));
 
         selected_tile = 0xFF;
@@ -1446,18 +1428,26 @@ void unitlistwindow::mousePressEvent(QMouseEvent *event)
             int pos_x = unitscrollArea->horizontalScrollBar()->value();
             int pos_y = unitscrollArea->verticalScrollBar()->value();
             UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor); //Restore original image
-             int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
-            int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
+            QRect widgetRect = unitscrollArea->geometry();
+            int fx = (event->pos().x()-widgetRect.left()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+            int fy = (event->pos().y()-widgetRect.top()+pos_y)/ (Tilesize*Scale_factor);
+            int os = selected_unit;
 
-            selected_unit = ((fy*10)+fx) * 2;     //Calc correct unit number
+            selected_unit = ((fy*10)+fx)*2;
 
-            if (selected_unit >= 120)
-                selected_unit = selected_unit-119; //correction for french units
+            if (fy > 5)
+              selected_unit = selected_unit-119;     //Calc correct unit number for french units
 
-            if (selected_unit < (Num_Units*2)) Draw_Hexagon(fx,fy,QPen(Qt::red, 1),&UnitListImageScaled,false,true); //Draw the frame
-
-            unit_name_text->setText(Unit_Name[selected_unit/2]);
-
+            if (selected_unit < Num_Units*2)
+            {
+              unit_name_text->setText(Unit_Name[selected_unit/2]);
+              Draw_Hexagon(fx,fy,QPen(Qt::red, 1),&UnitListImageScaled,false,true);
+            }
+            else
+            {
+              selected_unit = os;
+              return;
+            }
 
             QLabel *label = new QLabel();
             label->setPixmap(QPixmap::fromImage(UnitListImageScaled));  //update the image
@@ -1475,6 +1465,8 @@ void unitlistwindow::mousePressEvent(QMouseEvent *event)
         {
             int pos_x = unitscrollArea->horizontalScrollBar()->value();
             int pos_y = unitscrollArea->verticalScrollBar()->value();
+            UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor); //Restore original image
+
             selected_unit = 0xFF;     //No unit selected
 
             QLabel *label = new QLabel();
@@ -1497,9 +1489,9 @@ void buildablewindow::mousePressEvent(QMouseEvent *event)
        {
          int pos_x = buildablescrollArea->horizontalScrollBar()->value();
          int pos_y = buildablescrollArea->verticalScrollBar()->value();
-
-         int fx = (event->pos().x()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
-         int fy = (event->pos().y()+pos_y) / (Tilesize*Scale_factor);
+         QRect widgetRect = buildablescrollArea->geometry();
+         int fx = (event->pos().x()-widgetRect.left()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+         int fy = (event->pos().y()-widgetRect.top()+pos_y) / (Tilesize*Scale_factor);
 
          int unit = ((fy*10)+fx);     //Calc correct unit number
 
@@ -1554,15 +1546,16 @@ void buildablewindow::mousePressEvent(QMouseEvent *event)
 
 void buildingwindow::mousePressEvent(QMouseEvent *event)
 {
-    if ((event->button() == Qt::LeftButton) && (selected_building != -1))
-    {
+    QRect widgetRect = Building_ScrollArea->geometry();
 
+  if ((event->button() == Qt::LeftButton) && (selected_building != -1))
+    {
        //Is the mouse on the ScrollArea (The list of units in the building?)
-       if (Building_ScrollArea->rect().contains(event->pos()))
+       if (widgetRect.contains(event->pos()))
        {
        // QPoint mouse_pos = Building_ScrollArea->mapFromParent(event->pos());
 
-        int fx = (event->pos().x() / Scale_factor) / Tilesize;
+        int fx = ((event->pos().x()-widgetRect.left()) / Scale_factor) / Tilesize;
 
         Building_info[selected_building].Properties->Units[fx] = selected_unit/2;
 
@@ -1603,11 +1596,9 @@ void buildingwindow::mousePressEvent(QMouseEvent *event)
     {
 
        //Is the mouse on the ScrollArea (The list of units in the building?)
-       if (Building_ScrollArea->rect().contains(event->pos()))
+       if (widgetRect.contains(event->pos()))
        {
-        QPoint mouse_pos = Building_ScrollArea->mapFromParent(event->pos());
-
-        int fx = (mouse_pos.x() / Scale_factor) / Tilesize;
+        int fx = ((event->pos().x()-widgetRect.left()) / Scale_factor) / Tilesize;
 
         Building_info[selected_building].Properties->Units[fx] = 0xFF;
         QPainter painter(&Building_Image);
@@ -1653,6 +1644,82 @@ void buildingwindow::closeEvent(QCloseEvent *event)
 }
 
 
+void update_replacewindow()
+{
+    tile_image1 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
+    tile_image1.fill(Qt::transparent);
+    Draw_Part(0,0,r1,&tile_image1);
+    tile_image2 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
+    tile_image2.fill(Qt::transparent);
+    Draw_Part(0,0,r2,&tile_image2);
+
+    tile_image1 = tile_image1.scaled(tile_image1.width()*Scale_factor,tile_image1.height()*Scale_factor); //scale it
+    tile_image2 = tile_image2.scaled(tile_image2.width()*Scale_factor,tile_image2.height()*Scale_factor); //scale i
+    Tile1->setPixmap(QPixmap::fromImage(tile_image1));
+    Tile2->setPixmap(QPixmap::fromImage(tile_image2));
+    replacedlg->update();
+}
+
+void replacewindow::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        QRect widgetRect = Tile1->geometry();
+
+        if (widgetRect.contains(event->pos()))
+        {
+            r1 = selected_tile;
+            update_replacewindow();
+        }
+
+        widgetRect = Tile2->geometry();
+
+        if (widgetRect.contains(event->pos()))
+        {
+            r2 = selected_tile;
+            update_replacewindow();
+        }
+
+    }
+}
+
+
+void replacewindow::closeEvent(QCloseEvent *event)
+{
+    if ((replace_accepted) && (r1 != r2))
+    {
+        int                      x,y,offset;
+        field_info               fielddata;
+
+        offset = 0;
+        for (y = 0; y < Map.height; y++)
+        {
+            for (x = 0; x < Map.width; x++)
+            {
+                memcpy(&fielddata, Map.data + offset, sizeof(fielddata));
+                if (fielddata.Part == r1)
+                {
+                    fielddata.Part = r2;
+                    memcpy(Map.data + offset,&fielddata, sizeof(fielddata));
+                }
+                offset = offset + sizeof(Field);
+            }
+        }
+
+        changes = true;
+        MapImage.fill(Qt::transparent);
+        Draw_Map(); //redraw the mapimage
+        MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
+        if (grid_enabled) ShowGrid();  //redraw the grid if enabled
+        QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
+        imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
+        scrollArea->setWidget(imageLabel);
+    }
+
+    event->accept();
+}
+
+
 //========================== Main program ================================
 
 
@@ -1660,15 +1727,11 @@ void buildingwindow::closeEvent(QCloseEvent *event)
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-
     MainWindow               window;
-
     screenrect = app.primaryScreen()->geometry();   //Save screen geometry for window positioning
     window.resize(screenrect.width()/2, screenrect.height() / 2);
     window.move(screenrect.left(),screenrect.top());
     window.show();
-
-
 
     if ((!Read_Config()) || (!Check_for_game_files()))  //Check for config and game files first
     {
@@ -1676,7 +1739,6 @@ int main(int argc, char *argv[])
         Errormsg.warning(0,"","I cannot find the required game files! Please reconfigure directories in the settings.");
         Errormsg.setFixedSize(500,200);
     }
-
 
     return app.exec();
 }

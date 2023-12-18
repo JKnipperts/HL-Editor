@@ -2,9 +2,8 @@
 /*
 LIB.H by Jan Knipperts
 Provides all the functions to load bitmaps from the ressurce files of the game Historyline 1914-1918.
-Version 1.21 - 05.10.2023
-- some small modifications for use with Qt
-- Draw_Part and Draw_Unit accept now a destination QImage as parameter
+Version 1.3 - 11.12.2023
+- Fixed a bug in TPWM_unpack that caused writing outside the buffer in some cases.
 
 The main features:
 
@@ -172,14 +171,13 @@ int TPWM_Unpack()
 
 
 	while (outofs < TPWM.unpacked_size)
-	{
+	{      
         packbyte = TPWM.packed_data[inofs];
-
         inofs++;
 
 		for (bit = 7; bit >= 0; bit--)
 		{
-            if (getbit(packbyte, bit) > 0)
+            if (getbit(packbyte, bit) == 1)
 			{
 				b1 = TPWM.packed_data[inofs];
 				inofs++;
@@ -191,31 +189,39 @@ int TPWM_Unpack()
 				length = (unsigned int)(b1 & 0x0F) + 3;
 
 				for (i = 0; i <= (length - 1); i++)
-				{
-					TPWM.unpacked_data[outofs] = TPWM.unpacked_data[(outofs - distance)];
-					outofs++;
-                    if (outofs > TPWM.unpacked_size) break;
+                {
+                    if (outofs < TPWM.unpacked_size)
+                    {
+                        TPWM.unpacked_data[outofs] = TPWM.unpacked_data[(outofs - distance)];
+                        outofs++;
+                    }
+                    else
+                        break;
 				}
 			}
 			else
-			{
-				TPWM.unpacked_data[outofs] = TPWM.packed_data[inofs];
-				inofs++;
-                if (inofs > TPWM.packed_size) break;
-
-
-				outofs++;
-                if (outofs > TPWM.unpacked_size) break;
+            {
+                if ((outofs < TPWM.unpacked_size) && (inofs < TPWM.packed_size))
+                {
+                  TPWM.unpacked_data[outofs] = TPWM.packed_data[inofs];
+                  inofs++;
+                  outofs++;
+                }
+                else
+                  break;
 
 			}
         }
+
+        if (outofs >= TPWM.unpacked_size)
+            break;
 
     }
 
 
 
 
-	if (outofs >= TPWM.unpacked_size)
+    if (outofs == TPWM.unpacked_size)
 		return 0;
 	else
 		return -1;
@@ -238,7 +244,7 @@ int Unpack_file(FILE* f)
 	rewind(f);
 	fseek(f, 4, SEEK_SET);
 
-	IO_result = fread(&TPWM.unpacked_size, sizeof(TPWM.unpacked_size), 1, f); //Read unpacked size
+    IO_result = fread(&TPWM.unpacked_size, sizeof(TPWM.unpacked_size), 1, f); //Read unpacked size
 
 	if (IO_result != 1) //Read Error?
 	{
@@ -247,7 +253,7 @@ int Unpack_file(FILE* f)
     }
 
 
-    if ((TPWM.packed_data = (unsigned char*)malloc(TPWM.packed_size+1)) == NULL) //Reserve memory buffer for packed data (+1needed for 32 bit release)
+    if ((TPWM.packed_data = (unsigned char*)malloc(TPWM.packed_size+1)) == NULL) //Reserve memory buffer for packed data
 	{
 		fclose(f);
         return -4;
@@ -267,7 +273,7 @@ int Unpack_file(FILE* f)
 	
     fclose(f);
 
-    if ((TPWM.unpacked_data = (unsigned char*)malloc(TPWM.unpacked_size+1)) == NULL) //Reserve memory buffer for unpacked data (+1needed for 32 bit release)
+    if ((TPWM.unpacked_data = (unsigned char*)malloc(TPWM.unpacked_size+1)) == NULL) //Reserve memory buffer for unpacked data
 	{
 		free(TPWM.packed_data);
 		return -4;

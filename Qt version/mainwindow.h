@@ -37,7 +37,7 @@ private slots:
     void unitwindow_diag();
     void map_resize_diag();
     void season_diag();
-    void flood_diag();
+    void replace_diag();
     void buildable_units_diag();
     void setPath_diag();
     void setScale_diag();
@@ -47,8 +47,6 @@ private:
     void createActions();
     void createMenus();
     void adjustScrollBar(QScrollBar *scrollBar, double factor);
-
-    QScrollArea *scrollArea;
 
 
     QMenu *fileMenu;
@@ -67,7 +65,7 @@ private:
     QAction *showunitwindowAct;
     QAction *mapresizeAct;
     QAction *changeseasonAct;
-    QAction *floodAct;
+    QAction *replaceAct;
     QAction *buildableunitsAct;
     QLabel  *infoLabel;
 

@@ -15,9 +15,10 @@ void Release_Buffers()
 }
 
 bool Check_for_game_files()
-//Check whether game resources are available
+//Check whether game resources are available.
+//For Linux compatibility, a separate check is also carried out for lower-case file names.
 {
-    QFile PalFile(GameDir + Palette_name);
+
     QFile UnitdatFile(GameDir + Unitdat_name);
     QFile UnitlibFile(GameDir + Unitlib_name);
     QFile Partdat_S_File(GameDir + Partdat_S_name);
@@ -26,18 +27,49 @@ bool Check_for_game_files()
     QFile Partlib_W_File(GameDir + Partlib_W_name);
     QFile CodeFile = (GameDir + Code_name);
 
+    QFile PalFile(GameDir + Palette_name);
 
+    if (PalFile.exists() == false)
+    {
+        QFile PalFile(GameDir.toLower()+Palette_name.toLower());
+        if (PalFile.exists() == false) return false;
+    }
+    if (UnitdatFile.exists() == false)
+    {
+        QFile UnitdatFile(GameDir.toLower()+Unitdat_name.toLower());
+        if (UnitdatFile.exists() == false) return false;
+    }
+    if (UnitlibFile.exists() == false)
+    {
+        QFile UnitlibFile(GameDir.toLower()+Unitlib_name.toLower());
+        if (UnitlibFile.exists() == false) return false;
+    }
+    if (Partdat_S_File.exists() == false)
+    {
+        QFile Partdat_S_File(GameDir.toLower()+Partdat_S_name.toLower());
+        if (Partdat_S_File.exists() == false) return false;
+    }
+    if (Partlib_S_File.exists() == false)
+    {
+        QFile Partlib_S_File(GameDir.toLower()+Partlib_S_name.toLower());
+        if (Partlib_S_File.exists() == false) return false;
+    }
+    if (Partdat_W_File.exists() == false)
+    {
+        QFile Partdat_W_File(GameDir.toLower()+Partdat_W_name.toLower());
+        if (Partdat_W_File.exists() == false) return false;
+    }
+    if (Partlib_W_File.exists() == false)
+    {
+        QFile Partlib_W_File(GameDir.toLower()+Partlib_W_name.toLower());
+        if (Partlib_W_File.exists() == false) return false;
+    }
+    if (CodeFile.exists() == false)
+    {
+        QFile CodeFile(GameDir.toLower()+Code_name.toLower());
+        if (CodeFile.exists() == false) return false;
+    }
 
-    if ((PalFile.exists() == false) ||
-        (UnitdatFile.exists() == false) ||
-        (UnitlibFile.exists() == false) ||
-        (Partdat_S_File.exists() == false) ||
-        (Partlib_S_File.exists() == false) ||
-        (Partdat_W_File.exists() == false) ||
-        (Partlib_W_File.exists() == false) ||
-        (CodeFile.exists() == false))
-        return false;
-    else
         return true;
 }
 
@@ -449,11 +481,11 @@ void Create_Unitselection_window()
 void Create_buildable_units_window()
 {
 
-        buildable = new buildablewindow();
-        buildable->setWindowFlag(Qt::SubWindow);
-        buildable->setWindowFlags(Qt::WindowStaysOnTopHint);
-        buildable->resize(((11*Tilesize)*Scale_factor)+10, (((Num_Units/10)+1)*Tilesize)*Scale_factor);
-        buildable->setWindowTitle("Units buildable in factories");
+    buildable = new buildablewindow();
+    buildable->setWindowFlag(Qt::SubWindow);
+    buildable->setWindowFlags(Qt::WindowStaysOnTopHint);
+    buildable->resize(((11*Tilesize)*Scale_factor)+10, (((Num_Units/10)+1)*Tilesize)*Scale_factor);
+    buildable->setWindowTitle("Units buildable in factories");
 
         BuildableImage = QImage((10*Tilesize),((Num_Units/10)+1)*Tilesize, QImage::Format_RGB16); //Create a new QImage object
         BuildableImage.fill(Qt::transparent);
@@ -604,3 +636,57 @@ void Create_building_configuration_window()
             building_window->show();
         }
 }
+
+
+
+void Create_replace_tile_diag()
+{
+
+        replace_accepted = false;
+        r1 = selected_tile;
+        r2 = 0;
+
+        replacedlg = new replacewindow();
+        replacedlg->setWindowFlag(Qt::SubWindow);
+        replacedlg->setWindowFlags(Qt::WindowStaysOnTopHint);
+        replacedlg->resize(((2*Tilesize)*Scale_factor)+20, Tilesize*Scale_factor);
+        replacedlg->setWindowTitle("Replace tiles");
+
+        QLabel *textlabel1 = new QLabel();
+        textlabel1->setText("Replace");
+        QLabel *textlabel2 = new QLabel();
+        textlabel2->setText("with");
+
+        tile_image1 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
+        tile_image1.fill(Qt::transparent);
+        Draw_Part(0,0,r1,&tile_image1);
+        tile_image2 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
+        tile_image2.fill(Qt::transparent);
+        Draw_Part(0,0,r2,&tile_image2);
+
+        tile_image1 = tile_image1.scaled(tile_image1.width()*Scale_factor,tile_image1.height()*Scale_factor); //scale it
+        tile_image2 = tile_image2.scaled(tile_image2.width()*Scale_factor,tile_image2.height()*Scale_factor); //scale it
+
+        Tile1 = new QLabel();
+        Tile1->setPixmap(QPixmap::fromImage(tile_image1));
+        Tile2 = new QLabel();
+        Tile2->setPixmap(QPixmap::fromImage(tile_image2));
+
+        ok_button = new QPushButton("OK");
+        QObject::connect(ok_button, &QPushButton::clicked, [=]()
+        {
+            replace_accepted = true;
+            replacedlg->close();
+        });
+
+        QHBoxLayout *layout = new QHBoxLayout();
+        layout->addWidget(textlabel1);
+        layout->addWidget(Tile1);
+        layout->addWidget(textlabel2);
+        layout->addWidget(Tile2);
+        layout->addWidget(ok_button);
+
+        replacedlg->setLayout(layout);
+        replacedlg->show();
+}
+
