@@ -1,7 +1,7 @@
 Qt version of the History Line 1914-1918 editor
 The program is currently in beta testing. Therefore, there are currently more frequent updates of the files when errors and bugs have been fixed.
 
-Current Version is BETA 1.4
+Current Version is BETA 1.5
 
 Brief overview of the updates:
 11/20/2023 - I have completed a first beta version in which all functions have been implemented but not yet sufficiently tested.
@@ -9,6 +9,14 @@ Brief overview of the updates:
 11/28/2023 - Updated the source code to version Beta 1.2 
 12/05/2023 - Updated the source code to version Beta 1.3 
 12/18/2023 - Updated the source code to version Beta 1.4 
+01/16/2024 - Updated the source code to version Beta 1.5 
+
+ Changes beween BETA 1.4 and BETA 1.5
+  - Map info / Statistics added
+  - Fixed a bug that confused the assignment of fields to buildings when changing the map size
+  - A warning is issued when adding to the game and when calling up the statistics if more terrain graphics have been used than the game can process.
+  - A warning is issued if units are placed on fields that are unsuitable for them.
+  - These warnings can be switched on and off by the user.
 
 Changes between BETA 1.3 and BETA 1.4
   - Fixed a bug in TPWM_unpack that caused writing attempts outside the buffer in some cases.
