@@ -14,6 +14,51 @@ void Release_Buffers()
     return;
 }
 
+void Check_used_tiles()
+{
+    /*
+     * Unfortunately, the game only uses a 64 KB buffer for the terrain graphics.
+     * Since all terrain graphics together are well over 64 KB in size, this results in a limitation when using the graphics for your own maps.
+     * In addition, the first 25 graphics are always loaded into the memory, while others are only loaded if they are used on a map.
+     *
+     * 25*594 (unpacked size of a terrain tile) = 14.850 byte
+     * 65.535 byte (64 K buffer) - 14.850 = 50.686
+     * 50.686 / 594 = 85
+     * So this results in 85 mathematically possible additional parts the game can handle.
+     *
+     * During testing, however, errors sometimes occurred a little earlier (perhaps the game also uses the memory area for some variables or similar).
+     * Therefore we give a warning from 80 parts.
+     */
+
+    if (show_warnings)
+    {
+        int upper_parts = 0;
+        unsigned char used_parts[Num_Parts];
+        memset(&used_parts,0,sizeof(used_parts));
+
+        for (int offset = 0; offset < (Map.width*Map.height)*2; offset += 2) //Determine which tile graphics were used
+        {
+            if (Map.data[offset] != 0xAE)
+            used_parts[Map.data[offset]] = 1;
+        }
+
+        for (int i = 0; i < Num_Parts; i++) //Check how many of these are extended graphics
+        {
+            if (used_parts[i] == 1)
+            if (i > 24) upper_parts++;
+        }
+
+        if (upper_parts > 79)  //Issue a warning if 80 or more
+        {
+            QMessageBox              Warning;
+            Warning.warning(0,"Warning:","You have used more extended terrain tiles (tiles outside of grass level and building parts) than can fit in the game's memory buffer. This can lead to graphic errors and incorrect display of the map in the game.");
+            Warning.setFixedSize(500,200);
+        }
+    }
+}
+
+
+
 bool Check_for_game_files()
 //Check whether game resources are available.
 //For Linux compatibility, a separate check is also carried out for lower-case file names.
@@ -219,7 +264,7 @@ int Load_Ressources()
     //Read unit names
     C_Filename1 = (GameDir + Unitdat2_name); //Create a C style filename for use of stdio
     C_Filename1.replace("/'", "\\'");
-    if (Get_unit_names(C_Filename1.toStdString().data()) != 0)
+    if (Get_unit_data(C_Filename1.toStdString().data()) != 0)
     {
         Errormsg.critical(0,"Error","Error reading unit data!");
         Errormsg.setFixedSize(500,200);

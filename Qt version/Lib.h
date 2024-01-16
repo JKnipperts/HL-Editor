@@ -858,7 +858,7 @@ int Translate_Partnum(int part_num)
 	o = -1;
 	for (i = 0; i <= Num_Parts; ++i)
 	{
-		str = char2string(Partlib.Index[i].RES_Name, 8);
+        str = char2string(Partlib.Index[i].RES_Name, 8);
 		if (str.compare(char2string(Partdat.name[part_num], 8)) == 0)
 		{
 			o = i;
@@ -905,6 +905,7 @@ int Draw_Part(int xpos, int ypos, int part_num, QImage *Image)
 	if ((bitmap_offset + (BM_Header.width * BM_Header.height)) > Partlib.data_size) return -1;
 
     draw_8BPP(xpos, ypos, Image);
+
 	return 0;
 }
 

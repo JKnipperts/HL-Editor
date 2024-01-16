@@ -1,11 +1,18 @@
 /*
- * HL Editor - Beta version 1.3
+ * HL Editor - Beta version 5
  * by Jan Knipperts (Dragonsphere /DOSReloaded)
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1.31:
+ * Version info BETA 1.5:
 *  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
+*
+*  Changes to BETA 1.4
+*  - Statistics added
+*  - Fixed a bug that confused the assignment of fields to buildings when changing the map size
+*  - A warning is issued when adding to the game and when calling up the statistics if more terrain graphics have been used than the game can process.
+*  - A warning is issued if units are placed on fields that are unsuitable for them.
+*  - These warnings can also be switched off under Settings.
 *
 *  Changes to BETA 1.3
 *  - Fixed a bug in TPWM_unpack that caused writing attempts outside the buffer in some cases.
@@ -41,6 +48,8 @@
 *    New maps are only added to the game as two-player maps.
 *  - File access in the main program runs in the main program via Qt / QFile routines, but in some header files still via the standard C routines or fopen_s.
 *
+*
+* Tooltipps werden nicht angezeigt, anscheinend werden Unitnamen nicht korrekt angezeigt
 */
 
 
@@ -65,7 +74,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "BETA 1.31";
+QString                  Version = "BETA 1.5";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -131,7 +140,7 @@ bool                     changes = false;
 bool                     already_saved = false;
 bool                     replace_accepted = false;
 bool                     grid_enabled = true;
-
+bool                     show_warnings = true;
 
 
 //now include the code to load game ressources etc.
@@ -172,6 +181,8 @@ MainWindow::MainWindow()
     scrollArea->setVisible(true);
 
     setCentralWidget(scrollArea);
+
+
 }
 
 
@@ -241,6 +252,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
                 if (!no_tilechange)
                 {
+
 
                     //When a building is demolished...
                     if (((Map.data[field_pos*2] == 0x01) ||
@@ -419,7 +431,44 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
                 scrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
                 scrollArea->verticalScrollBar()->setValue(pos_y);
-                changes = true; //Now there are unsaved changes
+                changes = true; //There are unsaved changes now
+
+                if ((selected_unit != 0xFF) && (show_warnings))
+                {
+                    QString Partname = QString::fromStdString(char2string(Partdat.name[selected_tile],8));
+                    bool valid_terrain = TRUE;
+
+                    int unit = selected_unit / 2;
+                    if (unit > Num_Units) unit = unit-Num_Units;
+
+                    if (getbit(Unit_accessible_terrain[unit],0) == 0) //Deep Water is not accessible by unit
+                        if (Partname.contains("SSSEA")) valid_terrain = FALSE;
+
+                    if (getbit(Unit_accessible_terrain[unit],1) == 0) //Railroad tracks are not accessible by unit
+                        if (Partname.contains("SRAIL")) valid_terrain = FALSE;
+
+                    if (getbit(Unit_accessible_terrain[unit],2) == 0) //shallow water is not accessible by unit
+                        if (Partname.contains("SCOAS")) valid_terrain = FALSE;
+
+                    if (getbit(Unit_accessible_terrain[unit],3) == 0) //Trenches are not accessible by unit
+                        if (Partname.contains("SWALL")) valid_terrain = FALSE;
+
+                    if (getbit(Unit_accessible_terrain[unit],4) == 0) //Plains and road/bridge are not accessible by unit
+                        if ((Partname.contains("SPLAI")) || (Partname.contains("SSTRE"))) valid_terrain = FALSE;
+
+                    if (getbit(Unit_accessible_terrain[unit],5) == 0) //Forest is not accessible by unit
+                        if (Partname.contains("SFORE")) valid_terrain = FALSE;
+
+                    if (getbit(Unit_accessible_terrain[unit],6) == 0) //Mountains and narrow bridges are not accessible by unit
+                        if (Partname.contains("SMOUN")) valid_terrain = FALSE;
+
+                    if (!valid_terrain)
+                    {
+                        QMessageBox              Warning;
+                        Warning.warning(this,"Warning:","You have placed a unit on terrain where the game does not provide for it. This can lead to glitches and errors when playing the map in game.");
+                        Warning.setFixedSize(500,200);
+                    }
+                }
             }
         }
     }
@@ -530,7 +579,7 @@ void MainWindow::newFile_diag()
         if (Load_Ressources() != 0)
         {
             QMessageBox              Errormsg;
-            Errormsg.critical(0,"Error","Failed to load bitmaps from the game!");
+            Errormsg.critical(this,"Error","Failed to load bitmaps from the game!");
             Errormsg.setFixedSize(500,200);
             return;
         }
@@ -557,7 +606,7 @@ void MainWindow::newFile_diag()
     if ((Map.data = (unsigned char*)malloc(Map.data_size)) == NULL)
     {
         QMessageBox              Errormsg;
-        Errormsg.critical(0,"Error","Memory allocation error!");
+        Errormsg.critical(this,"Error","Memory allocation error!");
         Errormsg.setFixedSize(500,200);
         return;
     }
@@ -604,8 +653,7 @@ void MainWindow::newFile_diag()
         if (!MapImage.isNull()) MapImage = QImage(); //Release mem for the last used image
         if (!MapImageScaled.isNull()) MapImageScaled = QImage(); //Release mem for the last used scaled image
         MapImage = QImage(((Map.width/2)*Tilesize)+(((Map.width/2)-1)*Tileshift),((Map.height-1)*Tilesize)+(Tilesize/2), QImage::Format_RGB16); //Create a new QImage object for the map image
-        MapImage.fill(Qt::transparent);
-
+        MapImage.fill(Qt::transparent);   
         Draw_Map(); //and draw the map to it
         MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it        
         ShowGrid();  //Draw a Hexfield-Grid on it
@@ -639,6 +687,7 @@ void MainWindow::newFile_diag()
         if (Building_info != NULL) free(Building_info);
         if (SHP.buildings != NULL) free(SHP.buildings);
         Building_info = (Building_data_ext*) malloc(sizeof(Building_data_ext));
+
         changes = true;
         already_saved = false;
     }
@@ -668,7 +717,7 @@ void MainWindow::open_diag()
         if (Load_Map() == 0)
         {
             MapImage = QImage(((Map.width/2)*Tilesize)+(((Map.width/2)-1)*Tileshift),((Map.height-1)*Tilesize)+(Tilesize/2), QImage::Format_RGB16); //Create a new QImage object for the map image
-            MapImage.fill(Qt::transparent);
+            MapImage.fill(Qt::transparent);        
             Draw_Map(); //and draw the map to it
             MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
             Map.loaded = true;
@@ -696,6 +745,7 @@ void MainWindow::open_diag()
 
             changes = false;
             already_saved = true;
+            Check_used_tiles();
 
         }
     }
@@ -711,7 +761,7 @@ void MainWindow::save_diag()
     else
     {
         QMessageBox              Errormsg;
-        Errormsg.warning(0,"","There's nothing I could save.... Why don't you load a map first or create a new one?");
+        Errormsg.warning(this,"","There's nothing I could save.... Why don't you load a map first or create a new one?");
         Errormsg.setFixedSize(500,200);
     }
 
@@ -724,11 +774,12 @@ void MainWindow::saveas_diag()
     {
         already_saved = false;
         Save();
+        Check_used_tiles();
     }
     else
     {
         QMessageBox              Errormsg;
-        Errormsg.warning(0,"","There's nothing I could save.... Why don't you load a map first or create a new one?");
+        Errormsg.warning(this,"","There's nothing I could save.... Why don't you load a map first or create a new one?");
         Errormsg.setFixedSize(500,200);
     }
 }
@@ -754,6 +805,147 @@ void MainWindow::grid_diag()
     scrollArea->setWidget(imageLabel);
 }
 
+
+void MainWindow::statistics_diag()
+{
+
+    //Get number of used terrain tiles and units
+    int parts = 0;
+    int upper_parts = 0;
+    int units = 0;
+
+    int g_hq = 0;
+    int g_f = 0;
+    int g_d = 0;
+    int g_res = 0;
+    int g_units = 0;
+
+    int f_hq = 0;
+    int f_f = 0;
+    int f_d = 0;
+    int f_res = 0;
+    int f_units = 0;
+
+    int n_f = 0;
+    int n_d = 0;
+    int n_res = 0;
+    int n_units = 0;
+
+
+
+    unsigned char used_parts[Num_Parts];
+    memset(&used_parts,0,sizeof(used_parts));
+    unsigned char used_units[Num_Units];
+    memset(&used_units,0,sizeof(used_units));
+
+    for (int offset = 0; offset < (Map.width*Map.height)*2; offset += 2)
+    {
+        if (Map.data[offset] != 0xAE)
+        {
+            used_parts[Map.data[offset]] = 1;
+        }
+        if (Map.data[offset+1] != 0xFF)
+        {
+            if ((Map.data[offset+1] % 2) != 1)
+              g_units++;
+            else
+              f_units++;
+            used_units[Map.data[offset+1]/2] = 1;
+        }
+
+
+    }
+    for (int i = 0; i < Num_Parts; i++)
+        if (used_parts[i] == 1)
+        {
+            parts++;
+            if (i > 24) upper_parts++;
+        }
+
+    for (int i = 0; i < Num_Units; i++)
+        if (used_units[i] == 1) units++;
+
+    for (int i = 0; i < Building_stat.num_buildings; i++)
+    {
+        if (Building_info[i].Properties->Owner == 0)
+        {
+            if (Building_info[i].Properties->Type == 0)
+              g_hq++;
+            if (Building_info[i].Properties->Type == 1)
+              g_f++;
+            if (Building_info[i].Properties->Type == 2)
+              g_d++;
+
+            g_res += Building_info[i].Properties->Resources;
+            for (int i1 = 0; i1 < 6; i1++)
+              if (Building_info[i].Properties->Units[i1] != 0xFF) g_units++;  //Add units inside buildings
+        }
+        if (Building_info[i].Properties->Owner == 1)
+        {
+            if (Building_info[i].Properties->Type == 0)
+              f_hq++;
+            if (Building_info[i].Properties->Type == 1)
+              f_f++;
+            if (Building_info[i].Properties->Type == 2)
+              f_d++;
+
+            f_res += Building_info[i].Properties->Resources;
+            for (int i1 = 0; i1 < 6; i1++)
+              if (Building_info[i].Properties->Units[i1] != 0xFF) f_units++;  //Add units inside buildings
+        }
+        if (Building_info[i].Properties->Owner == 2)
+        {
+            if (Building_info[i].Properties->Type == 1)
+              n_f++;
+            if (Building_info[i].Properties->Type == 2)
+              n_d++;
+
+            n_res += Building_info[i].Properties->Resources;
+            for (int i1 = 0; i1 < 7; i1++)
+              if (Building_info[i].Properties->Units[i1] != 0xFF) n_units++;  //Add units inside buildings
+        }
+    }
+
+
+
+    QString numbersstr =
+        "Map size: "+QString::number(Map.width)+"x"+QString::number(Map.height)+"\n"+
+        "Different terrain tiles used: "+QString::number(parts)+"\n"+
+        "Extended terrain tiles used: "+QString::number(upper_parts)+"\n"+
+        "Different units used: "+QString::number(units)+"\n\n"+
+
+                         "Germany: \n"
+                         "Units: "+QString::number(g_units)+"\n"+
+                         "Resource income per turn: "+QString::number(g_res)+"\n"+
+                         "Buildings: "+QString::number((g_hq+g_f+g_d))+"\n"+
+                         " - Headquarters: "+QString::number(g_hq)+"\n"+
+                         " - Factories: "+QString::number(g_f)+"\n"+
+                         " - Depots: "+QString::number(g_d)+"\n"+
+                         "\n"+
+                         "France: \n"
+                         "Units: "+QString::number(f_units)+"\n"+
+                         "Resource income per turn: "+QString::number(f_res)+"\n"+
+                         "Buildings: "+QString::number((f_hq+f_f+f_d))+"\n"+
+                         " - Headquarters: "+QString::number(f_hq)+"\n"+
+                         " - Factories: "+QString::number(f_f)+"\n"+
+                         " - Depots: "+QString::number(f_d)+"\n"+
+                         "\n"+
+                         "Neutral: \n"
+                         "Units: "+QString::number(n_units)+"\n"+
+                         "Resources: "+QString::number(n_res)+"\n"+
+                         "Buildings: "+QString::number(n_f+n_d)+"\n"+
+                         " - Factories: "+QString::number(n_f)+"\n"+
+                         " - Depots: "+QString::number(n_d)+"\n";
+
+
+
+    QMessageBox              Info;
+    Info.information(this,"Information about your map:",numbersstr);
+    Info.setFixedSize(500,200);
+
+
+    Check_used_tiles();
+}
 
 void MainWindow::tilewindow_diag()
 {
@@ -802,7 +994,7 @@ void MainWindow::setPath_diag()
         if (!Check_for_game_files())
         {
             QMessageBox              Errormsg;
-            Errormsg.warning(0,"","I cannot find the required game files in the selected directory!");
+            Errormsg.warning(this,"","I cannot find the required game files in the selected directory!");
             Errormsg.setFixedSize(500,200);
         }
         else
@@ -813,7 +1005,7 @@ void MainWindow::setPath_diag()
             if (!cfgFile.isOpen())
             {
                 QMessageBox              Errormsg;
-                Errormsg.warning(0,"","I cannot save the configuration file!");
+                Errormsg.warning(this,"","I cannot save the configuration file!");
                 Errormsg.setFixedSize(500,200);
             }
             else
@@ -909,6 +1101,8 @@ void MainWindow::add_diag()
 
     if (Map.loaded == true)
     {
+        Check_used_tiles();
+
         bool ok;
         QString levelcode = QInputDialog::getText(this, tr("QInputDialog::getText()"),
                                          tr("Enter a levelcode for your map (5 letters):"), QLineEdit::Normal,
@@ -918,7 +1112,7 @@ void MainWindow::add_diag()
             if (!Check_levelcode(levelcode))
             {
               QMessageBox   Errormsg;
-              Errormsg.critical(0,"","Code must be five letters to work with the game.");
+              Errormsg.critical(this,"","Code must be five letters to work with the game.");
               Errormsg.setFixedSize(500,200);
               return;
             }
@@ -926,7 +1120,7 @@ void MainWindow::add_diag()
             if (Levelcode_exists(levelcode))
             {
               QMessageBox   Errormsg;
-              Errormsg.critical(0,"","Level already exists. Please choose another code for it.");
+              Errormsg.critical(this,"","Level already exists. Please choose another code for it.");
               Errormsg.setFixedSize(500,200);
               return;
             }
@@ -943,7 +1137,7 @@ void MainWindow::add_diag()
             if (maps.size()-1 >= 99 )
             {
                 QMessageBox   Errormsg;
-                Errormsg.critical(0,"","There are too many maps in the directory. The game can handle a maximum of 99.");
+                Errormsg.critical(this,"","There are too many maps in the directory. The game can handle a maximum of 99.");
                 Errormsg.setFixedSize(500,200);
                 return;
             }
@@ -957,7 +1151,7 @@ void MainWindow::add_diag()
             if (Save_Mapdata(Map_file.toStdString().data()) != 0) //Create new .fin file for this map.
             {
                 QMessageBox   Errormsg;
-                Errormsg.critical(0,"","Failed to create "+Map_file);
+                Errormsg.critical(this,"","Failed to create "+Map_file);
                 Errormsg.setFixedSize(500,200);
                 return;
             }
@@ -968,7 +1162,7 @@ void MainWindow::add_diag()
             if (Create_shp(SHPfile.toStdString().data()) != 0)
             {
                 QMessageBox              Errormsg;
-                Errormsg.warning(0,"","I cannot save the building data in "+SHPfile);
+                Errormsg.warning(this,"","I cannot save the building data in "+SHPfile);
                 Errormsg.setFixedSize(500,200);
             }
 
@@ -978,7 +1172,7 @@ void MainWindow::add_diag()
             if (Add_map(Codefile.toStdString().data(), levelcode) != 0)
             {
                 QMessageBox   Errormsg;
-                Errormsg.critical(0,"","Can't write data for the new map to CODES.DAT");
+                Errormsg.critical(this,"","Can't write data for the new map to CODES.DAT");
                 Errormsg.setFixedSize(500,200);
                 return;
             }
@@ -991,7 +1185,7 @@ void MainWindow::add_diag()
     else
     {
         QMessageBox Errormsg;
-        Errormsg.warning(0,"","There's nothing I could add to the game.... Why don't you load a map first or create a new one?");
+        Errormsg.warning(this,"","There's nothing I could add to the game.... Why don't you load a map first or create a new one?");
         Errormsg.setFixedSize(500,200);
     }
 }
@@ -1072,7 +1266,7 @@ void MainWindow::map_resize_diag()
         if ((data = (unsigned char*)malloc(((width+1) * (height+1) * 2))) == NULL)
         {
             QMessageBox  Errormsg;
-            Errormsg.critical(0,"Error","Memory allocation error!");
+            Errormsg.critical(this,"Error","Memory allocation error!");
             Errormsg.setFixedSize(500,200);
             return;
         }
@@ -1115,6 +1309,9 @@ void MainWindow::map_resize_diag()
         Map.height = height;
         Map.data_size = ((Map.width+1) * (Map.height+1)) * 2;
         Map.data = data; //Let Map.data point to new buffer
+
+        Add_building_positions(); //Correct building positions
+
         MapImage = QImage(((Map.width/2)*Tilesize)+(((Map.width/2)-1)*Tileshift),((Map.height-1)*Tilesize)+(Tilesize/2), QImage::Format_RGB16); //Create a new QImage object for the map image
         MapImage.fill(Qt::transparent);
         Draw_Map(); //and draw the map to it
@@ -1148,7 +1345,7 @@ void MainWindow::map_resize_diag()
     else
     {
     QMessageBox Errormsg;
-    Errormsg.warning(0,"","Please load or create a map first.");
+    Errormsg.warning(this,"","Please load or create a map first.");
     Errormsg.setFixedSize(500,200);
     }
 }
@@ -1180,7 +1377,7 @@ void MainWindow::season_diag()
 
     if (Load_Part_files(C_Filename1.toStdString().data(),C_Filename2.toStdString().data()) != 0)
     {
-        Errormsg.critical(0,"Error","Faild to load summer/winter graphics from the game!");
+        Errormsg.critical(this,"Error","Faild to load summer/winter graphics from the game!");
         Errormsg.setFixedSize(500,200);
         return;
     }
@@ -1239,7 +1436,7 @@ void MainWindow::replace_diag()
     else
     {
         QMessageBox Errormsg;
-        Errormsg.warning(0,"","Please load or create a map first.");
+        Errormsg.warning(this,"","Please load or create a map first.");
         Errormsg.setFixedSize(500,200);
     }
 
@@ -1258,10 +1455,20 @@ void MainWindow::buildable_units_diag()
     else
     {
         QMessageBox Errormsg;
-        Errormsg.warning(0,"","Please load or create a map first.");
+        Errormsg.warning(this,"","Please load or create a map first.");
         Errormsg.setFixedSize(500,200);
     }
 }
+
+
+void MainWindow::warning_diag()
+{
+    if(warningAct->isChecked())
+        show_warnings = TRUE;
+    else
+        show_warnings = FALSE;
+}
+
 
 
 void MainWindow::createActions()
@@ -1325,6 +1532,10 @@ void MainWindow::createActions()
     replaceAct->setStatusTip(tr("Replaces one tile with another"));
     connect(replaceAct,&QAction::triggered,this,&MainWindow::replace_diag);
 
+    statisticsAct = new QAction(tr("Map info"),this);
+    replaceAct->setStatusTip(tr("Shows map statistics"));
+    connect(statisticsAct,&QAction::triggered,this,&MainWindow::statistics_diag);
+
     buildableunitsAct = new QAction(tr("Set buildable units"),this);
     buildableunitsAct->setStatusTip(tr("Which units can be built in factories?"));
     connect(buildableunitsAct,&QAction::triggered,this,&MainWindow::buildable_units_diag);
@@ -1336,6 +1547,13 @@ void MainWindow::createActions()
     setScaleFactorAct = new QAction(tr("&Scale factor"),this);
     setScaleFactorAct->setStatusTip(tr("Scaler used to enlarge/enhance low resolution bitmaps."));
     connect(setScaleFactorAct,&QAction::triggered,this,&MainWindow::setScale_diag);
+
+    warningAct = new QAction(tr("Show warnings"), this);
+    warningAct->setCheckable(true);
+    warningAct->setChecked(true);
+    warningAct->setStatusTip(tr("Issue a warning if the map cannot be displayed correctly in the game or could lead to errors in the game."));
+    connect(warningAct,&QAction::triggered,this,&MainWindow::warning_diag);
+
 }
 
 
@@ -1359,10 +1577,13 @@ void MainWindow::createMenus()
     editMenu->addAction(showgridAct);
     editMenu->addAction(showtilewindowAct);
     editMenu->addAction(showunitwindowAct);
+    editMenu->addAction(statisticsAct);
+
 
     configMenu = menuBar()->addMenu(tr("&Settings"));
     configMenu->addAction(setPathAct);
     configMenu->addAction(setScaleFactorAct);
+    configMenu->addAction(warningAct);
 }
 
 

@@ -41,6 +41,8 @@ private slots:
     void buildable_units_diag();
     void setPath_diag();
     void setScale_diag();
+    void statistics_diag();
+    void warning_diag();
 
 
 private:
@@ -67,6 +69,8 @@ private:
     QAction *changeseasonAct;
     QAction *replaceAct;
     QAction *buildableunitsAct;
+    QAction *statisticsAct;
+    QAction *warningAct;
     QLabel  *infoLabel;
 
 

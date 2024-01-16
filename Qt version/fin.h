@@ -1,10 +1,8 @@
 /* FIN.H by Jan Knipperts
 Header file to read and write History Line 1914-1918 map files (*.fin)
 
-Version 1.2 - 28.8.2023
-- some small modifications for use with Qt
-- added Save_Mapdata to save .fin files
-
+Version 1.3 - 20.12.2023
+- used_tiles added  to be able to track how many terrain parts have been used so far.
 
 Load_Mapdata
 Loads a map from file
@@ -223,6 +221,8 @@ int  Draw_Map()
                 if (x % 2 != 0)
                 {
                     Draw_Part((x * (Tilesize - Tileshift)), (y * Tilesize) + (Tilesize / 2), Field.Part, &MapImage);
+
+
                     if (Field.Unit != 0xFF)
                     {
                         if (Field.Unit % 2 == 0) side = 1; else side = 2;
@@ -234,6 +234,7 @@ int  Draw_Map()
                 else
                 {
                     Draw_Part((x * (Tilesize - Tileshift)), (y * Tilesize), Field.Part, &MapImage);
+
                     if (Field.Unit != 0xFF)
                     {
                         if (Field.Unit % 2 == 0) side = 1; else side = 2;

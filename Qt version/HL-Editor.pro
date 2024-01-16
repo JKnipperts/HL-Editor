@@ -19,6 +19,7 @@ HEADERS += \
     fin.h \
     mainwindow.h \
     other.h \
+    replace.h \
     shp.h \
     tilelist.h \
     unitlist.h \
