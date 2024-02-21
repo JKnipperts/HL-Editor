@@ -1,5 +1,5 @@
 /*
- * HL Editor - Beta version 5
+ * HL Editor - Beta version 6
  * by Jan Knipperts (Dragonsphere /DOSReloaded)
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
