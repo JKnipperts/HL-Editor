@@ -84,6 +84,10 @@ int Get_unit_data(std::string unitfilename)
                     Unit_Name[i] = Unit_Name[i] + "OE";
                     break;
 
+                case 0x9A:
+                    Unit_Name[i] = Unit_Name[i] + "UE";
+                    break;
+
                 default:
                     Unit_Name[i] = Unit_Name[i] + QChar::fromLatin1(c);
                     break;

@@ -4,11 +4,23 @@
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1.5:
+ * Version info BETA 1.6:
 *  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
 *
+*  Changes to BETA 1.5
+*  - Fixed a bug in the display of german "ü"-Umlaut in the unit name.
+*  - Fixed German units alignement in the selection window
+*  - Now the terrain under a unit can also be changed without deleting it. Units can now be deleted by double-clicking on them.
+*  - Resources and units in the building are now retained when a building is replaced by another building.
+*  - Fixed a bug in the assignment of building data when buildings were replaced by others.
+*  - Maps can now also be loaded via their level code
+*  - The season and map type for in-game maps is read from the Codes.dat file.
+*    For cards that have not yet been added to the game, a temp file is created to save the season and card type.
+*  - It is now possible to create singelplayer maps with computer opponents.
+*  - Fixed setting of the "End of campaign"-marker when adding new maps to the game.
+*
 *  Changes to BETA 1.4
-*  - Statistics added
+*  - Map info / Statistics added
 *  - Fixed a bug that confused the assignment of fields to buildings when changing the map size
 *  - A warning is issued when adding to the game and when calling up the statistics if more terrain graphics have been used than the game can process.
 *  - A warning is issued if units are placed on fields that are unsuitable for them.
@@ -44,12 +56,9 @@
 *  - Fixed "Using QCharRef with an index pointing outside the valid range of a QString." warning caused by Get_Levelcodes
 *
 *  Known issues:
-*  - The Codes.dat of History Line contains further attributes for the individual maps that are not yet taken into account by this editor.
-*    New maps are only added to the game as two-player maps.
-*  - File access in the main program runs in the main program via Qt / QFile routines, but in some header files still via the standard C routines or fopen_s.
+*  - File access in the main program runs via Qt / QFile routines, but in some header files still via the standard C routines or fopen_s.
 *
 *
-* Tooltipps werden nicht angezeigt, anscheinend werden Unitnamen nicht korrekt angezeigt
 */
 
 
@@ -74,7 +83,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "BETA 1.5";
+QString                  Version = "BETA 1.6";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -90,7 +99,8 @@ QString                  Unitdat_name = "/LIB/UNIT.DAT";
 QString                  Unitdat2_name = "/UNIT.DAT";
 QString                  Cfg = "/CONFIG.CFG";               //Our config file
 
-
+QString                  Actual_Level = "";
+int                      Actual_Levelnum;
 
 QImage                   MapImage;                          //I use a QImage as Screenbuffer to draw the map
 QImage                   MapImageScaled;                    //Additional buffer for the scaled map image
@@ -141,6 +151,7 @@ bool                     already_saved = false;
 bool                     replace_accepted = false;
 bool                     grid_enabled = true;
 bool                     show_warnings = true;
+bool                     Player2 = true;
 
 
 //now include the code to load game ressources etc.
@@ -155,6 +166,28 @@ bool                     show_warnings = true;
 
 
 
+bool Check_levelcode(QString code)
+{
+    if (code.length() != 5)          //Wrong length for levelcode
+        return false;
+
+    int i;
+
+    for (i = 0; i < code.length(); i++)
+    {
+        if (!code.at(i).isLetter())   //character is no letter
+            return false;
+        if (!code.at(i).toLatin1())   //character is no valid ASCII characer
+            return false;
+    }
+
+    return true;
+
+}
+
+
+
+
 //=================== Main Window  ==========================
 
 
@@ -164,7 +197,7 @@ MainWindow::MainWindow()
 {
     createActions();
     createMenus();
-    setWindowTitle(Title+" "+Author+" - "+Version);
+    setWindowTitle(Title+" "+Author+" - Version: "+Version);
 
     //initialize images and the scroll area
     MapImage = QImage(); //Create a new QImage object for the map image
@@ -204,6 +237,80 @@ void MainWindow::closeEvent(QCloseEvent *event)
     Release_Buffers();
     event->accept();
 }
+
+void MainWindow::mouseDoubleClickEvent( QMouseEvent *event )
+{
+    //Double Click to delete unit on current field
+    if (event->button() == Qt::LeftButton)
+    {
+
+        if (Map.loaded == true)
+        {
+
+            int pos_x = scrollArea->horizontalScrollBar()->value();
+            int pos_y = scrollArea->verticalScrollBar()->value();
+            QPoint mouse_pos = scrollArea->mapFromParent(event->pos());
+            mouse_pos = mouse_pos + QPoint(pos_x,pos_y);
+
+            //Calc field position from mouse cords
+            //Thanks to Amit Patel for this elegant solution of a pixel coordinates to hexagon coordinates algorithm!
+            //Source: http://www-cs-students.stanford.edu/~amitp/Articles/GridToHex.html
+
+            int halfsize = Tilesize/2;
+            int mx = mouse_pos.x() / Scale_factor; //Let's leave out the scaling to make things easier
+            int my = mouse_pos.y() / Scale_factor;
+            int hy = my / halfsize;
+            int hx = mx / (Tilesize - Tileshift);
+
+            int diagonale[2][12] = {            //the x values of the diagonals of the hexagon
+                {7,6,6,5,4,4,3,3,2,1,1,0},
+                {0,1,1,2,3,3,4,4,5,6,6,7}
+            };
+
+            if( diagonale[(hy+hx)%2][my %halfsize] >= mx %(Tilesize - Tileshift) ) //We can use the y coordinate (modulo the half row height) as an index into the diagonal
+                hx--;
+
+            hy = ((hy-(hx%2))/2);
+
+            if (hx < 0) hx = 0;  //Just to be save...
+            if (hy < 0) hy = 0;
+
+
+            if ((hx < (Map.width-1)) && (hy < (Map.height-1)))  //Is the field on the map?
+            {
+                int field_pos = (hy*Map.width)+hx;
+
+                //Transport unit?
+
+                if ((Map.data[(field_pos*2)+1] == 0x2C) ||
+                    (Map.data[(field_pos*2)+1] == 0x2D) ||
+                    (Map.data[(field_pos*2)+1] == 0x34) ||
+                    (Map.data[(field_pos*2)+1] == 0x35) ||
+                    (Map.data[(field_pos*2)+1] == 0x3E) ||
+                    (Map.data[(field_pos*2)+1] == 0x3F))
+                    Correct_building_record_from_map(); //fix building data record
+
+
+                Map.data[(field_pos*2)+1] = 0xFF;
+                Redraw_Field(hx,hy,selected_tile,0xFF);
+                MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
+                if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
+                Draw_Hexagon(hx,hy,QPen(Qt::red, 1),&MapImageScaled,true,true); //redraw the frame
+
+                QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
+                imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
+                scrollArea->setWidget(imageLabel);
+
+                scrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
+                scrollArea->verticalScrollBar()->setValue(pos_y);
+                changes = true; //There are unsaved changes now
+            }
+        }
+    }
+}
+
+
+
 
 
 void MainWindow::mousePressEvent(QMouseEvent *event)
@@ -245,185 +352,96 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
             if (hy < 0) hy = 0;
 
 
-             if ((hx < (Map.width-1)) && (hy < (Map.height-1)))  //Is the field on the map?
+            if ((hx < (Map.width-1)) && (hy < (Map.height-1)))  //Is the field on the map?
             {
 
                 int field_pos = (hy*Map.width)+hx;
+                unsigned char old_tile = Map.data[field_pos*2];
+                unsigned char old_unit = Map.data[(field_pos*2)+1];
 
-                if (!no_tilechange)
-                {
 
-
-                    //When a building is demolished...
-                    if (((Map.data[field_pos*2] == 0x01) ||
-                         (Map.data[field_pos*2] == 0x02)) || // HQ
-                        ((Map.data[field_pos*2] >= 0x0C) &&
-                        (Map.data[field_pos*2] <= 0x11))) //Factory, Depot
-                    {
-                        Building_stat.num_buildings--;
-
-                        if ((Map.data[field_pos*2] == 0x01) || (Map.data[field_pos*2] == 0x02))
-                        {
-                            if (Building_stat.num_HQ > 0)  Building_stat.num_HQ--;
-                        }
-                        if ((Map.data[field_pos*2] >= 0x0C) && (Map.data[field_pos*2] <= 0x0E))
-                        {
-                            if (Building_stat.num_F > 0)  Building_stat.num_F--;
-                        }
-                        if ((Map.data[field_pos*2] >= 0x0F) && (Map.data[field_pos*2] <= 0x11))
-                        {
-                            if (Building_stat.num_D > 0)  Building_stat.num_D--;
-                        }
-                    }
-
-                    //When a building is be built...
-                    if (((selected_tile == 0x01) || (selected_tile == 0x02)) ||
-                        ((selected_tile >= 0x0C) && (selected_tile <= 0x11)))
-                    {
-                        Building_stat.num_buildings++;
-
-                        if (Building_info != NULL)
-                            Building_info = (Building_data_ext*) realloc(Building_info,Building_stat.num_buildings*sizeof(Building_data_ext));
-                        else
-                            Building_info = (Building_data_ext*) malloc(Building_stat.num_buildings*sizeof(Building_data_ext));
-
-                        Building_info[Building_stat.num_buildings-1].Field = field_pos;
-
-                        Building_info[Building_stat.num_buildings-1].Properties = (Building_data*) malloc(sizeof(Building_data));
-
-                        switch (selected_tile)
-                        {
-                            case 0x01:
-                            {
-                                Building_stat.num_HQ++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 0;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_HQ;
-                                break;
-                            }
-                            case 0x02:
-                            {
-                                Building_stat.num_HQ++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 0;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_HQ;
-                                break;
-                            }
-                            case 0x0C:  //Factory neutral
-                            {
-                                Building_stat.num_F++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 2;  //neutral
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
-                                break;
-                            }
-                            case 0x0D:  //Factory german
-                            {
-                                Building_stat.num_F++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
-                                break;
-                            }
-                            case 0x0E:  //Factory french
-                            {
-                                Building_stat.num_F++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 1;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_F;
-                                break;
-                            }
-                            case 0x0F:  //Depot neutral
-                            {
-                                Building_stat.num_D++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 2;  //neutral
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
-                                break;
-                            }
-                            case 0x10:  //Depot german
-                            {
-                                Building_stat.num_D++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
-                                break;
-                            }
-                            case 0x11:  //Depot french
-                            {
-                                Building_stat.num_D++;
-                                Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
-                                Building_info[Building_stat.num_buildings-1].Properties->Type = 2;
-                                Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_D;
-                                break;
-                            }
-                        }
-
-                        Building_info[Building_stat.num_buildings-1].Properties->Resources = 0;
-                        Building_info[Building_stat.num_buildings-1].Properties->Units[0] = 0xFF;
-                        Building_info[Building_stat.num_buildings-1].Properties->Units[1] = 0xFF;
-                        Building_info[Building_stat.num_buildings-1].Properties->Units[2] = 0xFF;
-                        Building_info[Building_stat.num_buildings-1].Properties->Units[3] = 0xFF;
-                        Building_info[Building_stat.num_buildings-1].Properties->Units[4] = 0xFF;
-                        Building_info[Building_stat.num_buildings-1].Properties->Units[5] = 0xFF;
-                        Building_info[Building_stat.num_buildings-1].Properties->Units[6] = 0xFF;
-                        Building_info[Building_stat.num_buildings-1].Properties->Unknown = 0;
-
-                    }
-
+                if ((!no_tilechange) &&  (Map.data[field_pos*2] != selected_tile))
+                {                   
                     Map.data[field_pos*2] = (unsigned char) selected_tile;
+                    changes = true; //There are unsaved changes now                                           
                 }
 
 
-                if ((Map.data[(field_pos*2)+1] == 0x2C) ||
-                    (Map.data[(field_pos*2)+1] == 0x2D) ||
-                    (Map.data[(field_pos*2)+1] == 0x34) ||
-                    (Map.data[(field_pos*2)+1] == 0x35) ||
-                    (Map.data[(field_pos*2)+1] == 0x3E) ||
-                    (Map.data[(field_pos*2)+1] == 0x3F)) //Transport)
-                    Building_stat.num_buildings--;
-
-                if ((selected_unit == 0x2C) ||
-                    (selected_unit == 0x2D) ||
-                    (selected_unit == 0x34) ||
-                    (selected_unit == 0x35) ||
-                    (selected_unit == 0x3E) ||
-                    (selected_unit == 0x3F)) //Transport)
+                if ((selected_unit != 0xFF) && (Map.data[(field_pos*2)+1] != selected_unit))
                 {
-                    Building_stat.num_buildings++;
-                    if (Building_info != NULL)
-                        Building_info = (Building_data_ext*) realloc(Building_info,Building_stat.num_buildings*sizeof(Building_data_ext));
-                    else
-                        Building_info = (Building_data_ext*) malloc(Building_stat.num_buildings*sizeof(Building_data_ext));
 
-                    Building_info[Building_stat.num_buildings-1].Field = field_pos;
-                    Building_info[Building_stat.num_buildings-1].Properties = (Building_data*) malloc(sizeof(Building_data));
+                    Map.data[(field_pos*2)+1] = (unsigned char) selected_unit;
+                    changes = true; //There are unsaved changes now               
 
-                    Building_stat.num_T++;
-                    if (selected_unit % 2 == 0)
-                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 0;  //german
-                    else
-                        Building_info[Building_stat.num_buildings-1].Properties->Owner = 1;  //french
+                    if (show_warnings)
+                    {
+                        QString Partname = QString::fromStdString(char2string(Partdat.name[selected_tile],8));
+                        bool valid_terrain = TRUE;
 
-                    Building_info[Building_stat.num_buildings-1].Properties->Type = 3;
-                    Building_info[Building_stat.num_buildings-1].Properties->Index = Building_stat.num_T;
-                    Building_info[Building_stat.num_buildings-1].Properties->Resources = 0;
-                    Building_info[Building_stat.num_buildings-1].Properties->Units[0] = 0xFF;
-                    Building_info[Building_stat.num_buildings-1].Properties->Units[1] = 0xFF;
-                    Building_info[Building_stat.num_buildings-1].Properties->Units[2] = 0xFF;
-                    Building_info[Building_stat.num_buildings-1].Properties->Units[3] = 0xFF;
-                    Building_info[Building_stat.num_buildings-1].Properties->Units[4] = 0xFF;
-                    Building_info[Building_stat.num_buildings-1].Properties->Units[5] = 0xFF;
-                    Building_info[Building_stat.num_buildings-1].Properties->Units[6] = 0xFF;
-                    Building_info[Building_stat.num_buildings-1].Properties->Unknown = 0;
+                        int unit;
+                        if (selected_unit != 0xFF)
+                            unit = selected_unit / 2;
+                        else
+                            unit = Map.data[(field_pos*2)+1] / 2;
+
+                        if (unit > Num_Units) unit = unit-Num_Units;
+
+                        if (getbit(Unit_accessible_terrain[unit],0) == 0) //Deep Water is not accessible by unit
+                            if (Partname.contains("SSSEA")) valid_terrain = FALSE;
+
+                        if (getbit(Unit_accessible_terrain[unit],1) == 0) //Railroad tracks are not accessible by unit
+                            if (Partname.contains("SRAIL")) valid_terrain = FALSE;
+
+                        if (getbit(Unit_accessible_terrain[unit],2) == 0) //shallow water is not accessible by unit
+                            if (Partname.contains("SCOAS")) valid_terrain = FALSE;
+
+                        if (getbit(Unit_accessible_terrain[unit],3) == 0) //Trenches are not accessible by unit
+                            if (Partname.contains("SWALL")) valid_terrain = FALSE;
+
+                        if (getbit(Unit_accessible_terrain[unit],4) == 0) //Plains and road/bridge are not accessible by unit
+                            if ((Partname.contains("SPLAI")) || (Partname.contains("SSTRE"))) valid_terrain = FALSE;
+
+                        if (getbit(Unit_accessible_terrain[unit],5) == 0) //Forest is not accessible by unit
+                            if (Partname.contains("SFORE")) valid_terrain = FALSE;
+
+                        if (getbit(Unit_accessible_terrain[unit],6) == 0) //Mountains and narrow bridges are not accessible by unit
+                            if (Partname.contains("SMOUN")) valid_terrain = FALSE;
+
+                        if ((((selected_tile == 0x01) || (selected_tile == 0x02)) ||
+                             ((selected_tile >= 0x0C) && (selected_tile <= 0x11))) && (selected_unit != 0xFF))
+                            valid_terrain = FALSE;
+
+                        if (!valid_terrain)
+                        {
+                            QMessageBox              Warning;
+                            Warning.warning(this,"Warning:","You have placed a unit on terrain where the game does not provide for it. This can lead to glitches and errors when playing the map in game.");
+                            Warning.setFixedSize(500,200);
+                        }
+                    }
                 }
 
-                Map.data[(field_pos*2)+1] = (unsigned char) selected_unit;
-                Redraw_Field(hx,hy,selected_tile,selected_unit);
+                if (((old_tile == 0x01) || (old_tile == 0x02)) ||       //If a building has been set or modified....
+                    ((old_tile >= 0x0C) && (old_tile <= 0x11)) ||
+                    ((old_unit == 0x2C) ||
+                     (old_unit  == 0x2D) ||
+                     (old_unit  == 0x34) ||
+                     (old_unit  == 0x35) ||
+                     (old_unit  == 0x3E) ||
+                     (old_unit  == 0x3F)) ||
+                    ((selected_tile == 0x01) || (selected_tile == 0x02)) ||
+                    ((selected_tile >= 0x0C) && (selected_tile <= 0x11)) ||
+                    ((selected_unit == 0x2C) ||
+                     (selected_unit  == 0x2D) ||
+                     (selected_unit  == 0x34) ||
+                     (selected_unit  == 0x35) ||
+                     (selected_unit  == 0x3E) ||
+                     (selected_unit  == 0x3F)))
+                        Correct_building_record_from_map(); //...Correct the building data record in memory
+
+                Redraw_Field(hx,hy,Map.data[(field_pos*2)],Map.data[(field_pos*2)+1]);
                 MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
                 if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
                 Draw_Hexagon(hx,hy,QPen(Qt::red, 1),&MapImageScaled,true,true); //redraw the frame
-
 
                 QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
                 imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
@@ -431,45 +449,9 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
                 scrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
                 scrollArea->verticalScrollBar()->setValue(pos_y);
-                changes = true; //There are unsaved changes now
 
-                if ((selected_unit != 0xFF) && (show_warnings))
-                {
-                    QString Partname = QString::fromStdString(char2string(Partdat.name[selected_tile],8));
-                    bool valid_terrain = TRUE;
 
-                    int unit = selected_unit / 2;
-                    if (unit > Num_Units) unit = unit-Num_Units;
-
-                    if (getbit(Unit_accessible_terrain[unit],0) == 0) //Deep Water is not accessible by unit
-                        if (Partname.contains("SSSEA")) valid_terrain = FALSE;
-
-                    if (getbit(Unit_accessible_terrain[unit],1) == 0) //Railroad tracks are not accessible by unit
-                        if (Partname.contains("SRAIL")) valid_terrain = FALSE;
-
-                    if (getbit(Unit_accessible_terrain[unit],2) == 0) //shallow water is not accessible by unit
-                        if (Partname.contains("SCOAS")) valid_terrain = FALSE;
-
-                    if (getbit(Unit_accessible_terrain[unit],3) == 0) //Trenches are not accessible by unit
-                        if (Partname.contains("SWALL")) valid_terrain = FALSE;
-
-                    if (getbit(Unit_accessible_terrain[unit],4) == 0) //Plains and road/bridge are not accessible by unit
-                        if ((Partname.contains("SPLAI")) || (Partname.contains("SSTRE"))) valid_terrain = FALSE;
-
-                    if (getbit(Unit_accessible_terrain[unit],5) == 0) //Forest is not accessible by unit
-                        if (Partname.contains("SFORE")) valid_terrain = FALSE;
-
-                    if (getbit(Unit_accessible_terrain[unit],6) == 0) //Mountains and narrow bridges are not accessible by unit
-                        if (Partname.contains("SMOUN")) valid_terrain = FALSE;
-
-                    if (!valid_terrain)
-                    {
-                        QMessageBox              Warning;
-                        Warning.warning(this,"Warning:","You have placed a unit on terrain where the game does not provide for it. This can lead to glitches and errors when playing the map in game.");
-                        Warning.setFixedSize(500,200);
-                    }
-                }
-            }
+             }
         }
     }
 
@@ -598,6 +580,7 @@ void MainWindow::newFile_diag()
 
     if (Map.data != NULL) free(Map.data);
 
+
     Map.width = 16; //Set default width and height
     Map.height = 16;
     Map.data_size = ((Map.width+1) * (Map.height+1)) * 2;
@@ -612,7 +595,6 @@ void MainWindow::newFile_diag()
     }
     else
     {
-
         unsigned char tile;
 
         QMessageBox::StandardButton reply;
@@ -656,12 +638,10 @@ void MainWindow::newFile_diag()
         MapImage.fill(Qt::transparent);   
         Draw_Map(); //and draw the map to it
         MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it        
-        ShowGrid();  //Draw a Hexfield-Grid on it
         QLabel *imageLabel = new QLabel;     //Update the scrollArea
         imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
         if (scrollArea == NULL) scrollArea = new(QScrollArea);
         scrollArea->setWidget(imageLabel);
-        showgridAct->setChecked(true);
 
         if (showtilewindowAct->isChecked() == true)
         {
@@ -687,9 +667,122 @@ void MainWindow::newFile_diag()
         if (Building_info != NULL) free(Building_info);
         if (SHP.buildings != NULL) free(SHP.buildings);
         Building_info = (Building_data_ext*) malloc(sizeof(Building_data_ext));
+        memset(SHP.can_be_built,0,sizeof(SHP.can_be_built));
+        SHP.buildings = 0;
 
         changes = true;
         already_saved = false;
+        Actual_Level = "";
+        Actual_Levelnum = -1;
+        setWindowTitle(Title+" "+Author+" - Version: "+Version);
+        Player2 = true;
+        maptypeAct->setChecked(true);
+    }
+}
+
+
+void MainWindow::Open_Map()
+{
+    QString                  C_Filename1;
+    QString                  C_Filename2;
+    QMessageBox              Errormsg;
+
+    if (!Map_file.isEmpty() && !Map_file.isNull())
+    {
+
+        if (!Res_loaded)
+        {
+          if (Load_Ressources() != 0)
+          {
+              QMessageBox              Errormsg;
+              Errormsg.critical(this,"Error","Failed to load bitmaps from the game!");
+              Errormsg.setFixedSize(500,200);
+              return;
+          }
+        }
+
+        if (Load_Map() == 0)
+        {                  
+            if (!summer)
+            {
+                C_Filename1 = (GameDir + Partlib_W_name); //Create C style filenames for use of stdio
+                C_Filename1.replace("/", "\\");
+                C_Filename2 = (GameDir + Partdat_W_name);
+                C_Filename2.replace("/", "\\");
+            }
+            else  //summer
+            {
+                C_Filename1 = (GameDir + Partlib_S_name); //Create C style filenames for use of stdio
+                C_Filename1.replace("/", "\\");
+                C_Filename2 = (GameDir + Partdat_S_name);
+                C_Filename2.replace("/", "\\");
+            }
+            Load_Part_files(C_Filename1.toStdString().data(),C_Filename2.toStdString().data()); //Load correct season graphics
+
+            if (Player2)
+                maptypeAct->setChecked(true);
+            else
+                maptypeAct->setChecked(false);
+
+            MapImage = QImage(((Map.width/2)*Tilesize)+(((Map.width/2)-1)*Tileshift),((Map.height-1)*Tilesize)+(Tilesize/2), QImage::Format_RGB16); //Create a new QImage object for the map image
+            MapImage.fill(Qt::transparent);
+            Draw_Map(); //and draw the map to it
+            MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
+            Map.loaded = true;
+            if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
+            QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
+            imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
+            scrollArea->setWidget(imageLabel);
+            if (showtilewindowAct->isChecked() == true)
+            {
+                if (tile_selection == NULL)
+                    Create_Tileselection_window();
+                else
+                {
+                    TileListImage.fill(Qt::transparent);
+                    int tx = 0;
+                    int ty = 0;
+
+                    for (int tc = 0; tc < Num_Parts; tc++)
+                    {
+                        Draw_Part(tx*Tilesize,ty*Tilesize,tc,&TileListImage); //Draw the bitmap
+                        tx++;
+                        if (tx == 10)
+                        {
+                            tx = 0;
+                            ty++;
+                        }
+                    }
+
+                    TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Create a scaled version of it
+                    Draw_Hexagon(0,0,QPen(Qt::red, 1),&TileListImageScaled,false,true);
+                    selected_tile = 0;
+                    QLabel *label = new QLabel();
+                    QHBoxLayout *layout = new QHBoxLayout();
+                    label->setPixmap(QPixmap::fromImage(TileListImageScaled));
+                    tilescrollArea->setWidget(label);
+                    layout->addWidget(tilescrollArea);
+                    tile_selection->update();
+                }
+            }
+
+            if (showunitwindowAct->isChecked() == true)
+            {
+                if (unit_selection == NULL)
+                    Create_Unitselection_window();
+                else
+                    unit_selection->show();
+            }
+
+            changes = false;
+            already_saved = true;
+            Check_used_tiles();
+            if (Actual_Level != "")
+                setWindowTitle(Title+" editing map "+Actual_Level);
+            else
+                setWindowTitle(Title+" "+Author+" - Version: "+Version);
+
+        }
     }
 }
 
@@ -707,51 +800,79 @@ void MainWindow::open_diag()
     Map_file = QFileDialog::getOpenFileName(this,
                                             tr("Open History Line 1914-1918 map file"),MapDir, tr("HL map files (*.fin)"));
 
-    if (!Map_file.isEmpty() && !Map_file.isNull())
-    {
-        if (Res_loaded == false)
-        {
-            if (Load_Ressources() != 0) return;
-        }
-
-        if (Load_Map() == 0)
-        {
-            MapImage = QImage(((Map.width/2)*Tilesize)+(((Map.width/2)-1)*Tileshift),((Map.height-1)*Tilesize)+(Tilesize/2), QImage::Format_RGB16); //Create a new QImage object for the map image
-            MapImage.fill(Qt::transparent);        
-            Draw_Map(); //and draw the map to it
-            MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
-            Map.loaded = true;
-            if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
-            QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
-            imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
-
-            scrollArea->setWidget(imageLabel);
-
-            if (showtilewindowAct->isChecked() == true)
-            {
-              if (tile_selection == NULL)
-                  Create_Tileselection_window();
-              else
-                  tile_selection->show();
-            }
-
-            if (showunitwindowAct->isChecked() == true)
-            {
-              if (unit_selection == NULL)
-                  Create_Unitselection_window();
-              else
-                  unit_selection->show();
-            }
-
-            changes = false;
-            already_saved = true;
-            Check_used_tiles();
-
-        }
-    }
+    Open_Map();
 
 }
 
+
+void MainWindow::open_by_code_diag()
+{
+    if ((Map.loaded == true) && (changes == true))
+    {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, Title, "There are unsaved changes to the map. Do you want to save them?",
+                                      QMessageBox::Yes|QMessageBox::No);
+        if (reply == QMessageBox::Yes)
+          Save();
+    }
+
+    if (!Res_loaded)
+    {
+        if (Load_Ressources() != 0)
+        {
+          QMessageBox              Errormsg;
+          Errormsg.critical(this,"Error","Failed to load bitmaps from the game!");
+          Errormsg.setFixedSize(500,200);
+          return;
+        }
+    }
+
+    bool ok;
+    QString levelcode = QInputDialog::getText(this, tr("Open map by levelcode:"),
+                                              tr("Code of the map you want to load:"), QLineEdit::Normal,
+                                              "", &ok);
+    if (ok && !levelcode.isEmpty())
+    {
+        if (!Check_levelcode(levelcode))
+        {
+          QMessageBox   Errormsg;
+          Errormsg.critical(this,"","Code must be five letters!");
+          Errormsg.setFixedSize(500,200);
+            return;
+        }
+
+        int i;
+        int fnum;
+        fnum = 0;
+
+        for (i=0;i < Levelcode.Codelist.count(); i++)
+        {
+            if (QString::compare(Levelcode.Codelist[i], levelcode, Qt::CaseInsensitive) == 0)
+            {
+              fnum = i;
+              break;
+            }
+        }
+
+        if (fnum == 0)
+        {
+            QMessageBox   Errormsg;
+            Errormsg.critical(this,"","Unfortunately I could not find a map with the code "+levelcode+"!");
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+
+        if (fnum < 10)
+            Map_file = "0"+QString::number(fnum);
+        else
+            Map_file = QString::number(fnum);
+
+        Map_file = Map_file+".fin" ;
+        Map_file = MapDir+"/"+Map_file;
+        Map_file.replace("/'", "\\'");
+        Open_Map();
+    }
+}
 
 
 void MainWindow::save_diag()
@@ -1074,30 +1195,10 @@ void MainWindow::setScale_diag()
 }
 
 
-bool Check_levelcode(QString code)
-{
-    if (code.length() != 5)          //Wrong length for levelcode
-        return false;
-
-    int i;
-
-    for (i = 0; i < code.length(); i++)
-    {
-        if (!code.at(i).isLetter())   //character is no letter
-            return false;
-        if (!code.at(i).toLatin1())   //character is no valid ASCII characer
-            return false;
-    }
-
-    return true;
-
-}
-
-
 
 void MainWindow::add_diag()
 {
-    QString Codefile;
+    QString Codefile,Comfile,Newfile;
 
     if (Map.loaded == true)
     {
@@ -1105,24 +1206,24 @@ void MainWindow::add_diag()
 
         bool ok;
         QString levelcode = QInputDialog::getText(this, tr("QInputDialog::getText()"),
-                                         tr("Enter a levelcode for your map (5 letters):"), QLineEdit::Normal,
-                                        "", &ok);
+                                                  tr("Enter a levelcode for your map (5 letters):"), QLineEdit::Normal,
+                                                  "", &ok);
         if (ok && !levelcode.isEmpty())
         {
             if (!Check_levelcode(levelcode))
             {
-              QMessageBox   Errormsg;
-              Errormsg.critical(this,"","Code must be five letters to work with the game.");
-              Errormsg.setFixedSize(500,200);
-              return;
+                QMessageBox   Errormsg;
+                Errormsg.critical(this,"","Code must be five letters to work with the game.");
+                Errormsg.setFixedSize(500,200);
+                return;
             }
 
             if (Levelcode_exists(levelcode))
             {
-              QMessageBox   Errormsg;
-              Errormsg.critical(this,"","Level already exists. Please choose another code for it.");
-              Errormsg.setFixedSize(500,200);
-              return;
+                QMessageBox   Errormsg;
+                Errormsg.critical(this,"","Level already exists. Please choose another code for it.");
+                Errormsg.setFixedSize(500,200);
+                return;
             }
 
             QDir Map_dir(MapDir);
@@ -1143,6 +1244,18 @@ void MainWindow::add_diag()
             }
 
             int filenumber = QString((QString) maps[maps.size()-1][0]+maps[maps.size()-1][1]).toInt();
+
+
+            if (Levelcode.Number_of_levels != (filenumber+1))
+            {
+                QMessageBox              Errormsg;
+                Errormsg.warning(this,"","There are "+QString::number((filenumber+1))+" valid named map-files in the MAP subdirectory, but "
+                                               +QString::number(Levelcode.Number_of_levels)+" maps stored in the game's Code.dat file. "+
+                                               "Please clean up the directory first.");
+                Errormsg.setFixedSize(500,200);
+                return;
+            }
+
             filenumber++;
             Map_file = QString::number(filenumber);
             Map_file = Map_file+".fin" ;
@@ -1177,8 +1290,62 @@ void MainWindow::add_diag()
                 return;
             }
 
+            bool            ok;
+
+            QStringList     items;
+
+            items << "Type I"
+                  << "Type II"
+                  << "Type III"
+                  << "Type IV";
+
+
+
+            QString item = QInputDialog::getItem(this, tr("Type of computer opponent"),
+                                                 tr("You have configured your map as a single player map. Please select the type of computer opponent (.COM file) for your map:"), items, 0, false, &ok);
+            if (ok && !item.isEmpty())
+            {
+
+                if (item == "Type I"){Comfile = "00.COM";}
+                if (item == "Type II"){Comfile = "21.COM";}
+                if (item == "Type III"){Comfile = "45.COM";}
+                if (item == "Type IV"){Comfile = "22.COM";}
+
+                Comfile = MapDir+"/"+Comfile;
+                Comfile.replace("/'", "\\'");
+
+                if (!QFile::exists(Comfile))
+                {
+                  Comfile = Comfile.toLower();
+                  if (!QFile::exists(Comfile))
+                  {
+                        QMessageBox   Errormsg;
+                        Errormsg.critical(this,"","File "+Comfile+" not found!");
+                        Errormsg.setFixedSize(500,200);
+                        return;
+                  }
+                }
+
+                Newfile = Map_file;
+                Newfile.replace(".fin",".com").replace(".FIN",".COM");
+                QFile::copy(Comfile, Newfile);
+
+                if (!QFile::exists(Newfile))
+                {
+                  QMessageBox   Errormsg;
+                  Errormsg.critical(this,"","Failed to create "+Newfile+"!");
+                  Errormsg.setFixedSize(500,200);
+                  return;
+                }
+            }
+
+
+            Actual_Level = levelcode;                                    
             changes = false;
             already_saved = true;
+
+            setWindowTitle(Title+" "+Actual_Level);
+
 
         }
     }
@@ -1425,13 +1592,23 @@ void MainWindow::season_diag()
 }
 
 
+void MainWindow::maptype_diag()
+{
+    if(maptypeAct->isChecked())
+    {
+        Player2 = true;
+    }
+    else
+    {
+        Player2 = false;
+    }
+}
+
 void MainWindow::replace_diag()
 {
     if (Map.loaded == true)
     {
         Create_replace_tile_diag();
-
-
     }
     else
     {
@@ -1483,6 +1660,10 @@ void MainWindow::createActions()
     openAct->setStatusTip(tr("Open an existing map"));
     connect(openAct, &QAction::triggered, this, &MainWindow::open_diag);
 
+    openbyCodeAct = new QAction(tr("Open map by Levelcode"),this);
+    openbyCodeAct->setStatusTip(tr("Open an existing map by its ingame levelcode"));
+    connect(openbyCodeAct, &QAction::triggered, this, &MainWindow::open_by_code_diag);
+
     saveAct = new QAction(tr("&Save"), this);
     saveAct->setShortcuts(QKeySequence::Save);
     saveAct->setStatusTip(tr("Save the map to disk"));
@@ -1516,7 +1697,6 @@ void MainWindow::createActions()
     showunitwindowAct = new QAction(tr("Show unit selection window"), this);
     showunitwindowAct->setCheckable(true);
     showunitwindowAct->setChecked(true);
-
     showunitwindowAct->setStatusTip(tr("Show/Hide the unit selection window"));
     connect(showunitwindowAct,&QAction::triggered,this,&MainWindow::unitwindow_diag);
 
@@ -1532,8 +1712,14 @@ void MainWindow::createActions()
     replaceAct->setStatusTip(tr("Replaces one tile with another"));
     connect(replaceAct,&QAction::triggered,this,&MainWindow::replace_diag);
 
+    maptypeAct = new QAction(tr("Two-Player map"),this);
+    maptypeAct->setStatusTip(tr("Sets Map type to single or two player map"));
+    maptypeAct->setCheckable(true);
+    maptypeAct->setChecked(true);
+    connect(maptypeAct,&QAction::triggered,this,&MainWindow::maptype_diag);
+
     statisticsAct = new QAction(tr("Map info"),this);
-    replaceAct->setStatusTip(tr("Shows map statistics"));
+    statisticsAct->setStatusTip(tr("Shows map statistics"));
     connect(statisticsAct,&QAction::triggered,this,&MainWindow::statistics_diag);
 
     buildableunitsAct = new QAction(tr("Set buildable units"),this);
@@ -1562,6 +1748,7 @@ void MainWindow::createMenus()
     fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(newAct);
     fileMenu->addAction(openAct);
+    fileMenu->addAction(openbyCodeAct);
     fileMenu->addAction(saveAct);
     fileMenu->addAction(saveasAct);
     fileMenu->addAction(addtogameAct);
@@ -1571,6 +1758,7 @@ void MainWindow::createMenus()
     editMenu =  menuBar()->addMenu(tr("&Edit"));
     editMenu->addAction(mapresizeAct);
     editMenu->addAction(changeseasonAct);
+    editMenu->addAction(maptypeAct);
     editMenu->addAction(replaceAct);
     editMenu->addAction(buildableunitsAct);
     editMenu->addSeparator();

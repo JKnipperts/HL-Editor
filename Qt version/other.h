@@ -10,7 +10,7 @@ void Release_Buffers()
     if (Unitlib.data != NULL) free(Unitlib.data);
     if (Building_info != NULL) free(Building_info);
     if (SHP.buildings != NULL) free(SHP.buildings);
-
+    if (CODESDAT_buffer != NULL)free(CODESDAT_buffer);
     return;
 }
 
@@ -119,41 +119,6 @@ bool Check_for_game_files()
 }
 
 
-void Save()
-//Save actual Mapdata
-{
-    if ((already_saved == false) || (Map_file == ""))
-        Map_file = QFileDialog::getSaveFileName(0,"Save History Line 1914-1918 map file",MapDir,"HL map files (*.fin)");
-
-    if (!Map_file.isEmpty() && !Map_file.isNull())
-    {
-        if ((!Map_file.contains(".fin")) && (!Map_file.contains(".FIN")))
-         Map_file = Map_file+".FIN";
-
-
-        if (Save_Mapdata(Map_file.toStdString().data()) != 0)
-        {
-            QMessageBox              Errormsg;
-            Errormsg.warning(0,"","I cannot save the map data in "+Map_file);
-            Errormsg.setFixedSize(500,200);
-            return;
-        }
-        QString SHPfile;
-        SHPfile = Map_file;
-        SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");
-
-        if (Create_shp(SHPfile.toStdString().data()) != 0)
-        {
-            QMessageBox              Errormsg;
-            Errormsg.warning(0,"","I cannot save the building data in "+SHPfile+"!");
-            Errormsg.setFixedSize(500,200);
-            return;
-        }
-        changes = false; //All changes saved
-        already_saved = true;
-    }
-}
-
 
 
 bool Read_Config()
@@ -253,13 +218,14 @@ int Load_Ressources()
     //Load levelcodes
     C_Filename1 = (GameDir + Code_name); //Create a C style filename for use of stdio
     C_Filename1.replace("/'", "\\'");
-    if (Get_Levelcodes(C_Filename1.toStdString().data()) != 0)
+    if (Read_Codesdat(C_Filename1.toStdString().data()) != 0)
     {
-        Errormsg.critical(0,"Error","Error reading levelcodes!");
+        Errormsg.critical(0,"Error","Error reading CODES.DAT!");
         Errormsg.setFixedSize(500,200);
         Release_Buffers();
         return -1;
     }
+    Get_Levelcodes();
 
     //Read unit names
     C_Filename1 = (GameDir + Unitdat2_name); //Create a C style filename for use of stdio
@@ -276,11 +242,169 @@ int Load_Ressources()
 }
 
 
+
+bool Get_actual_map_options() //Checks whether the actual map (by Map_file) is already integrated in the game and loads additional information if this is the case.
+{
+    if (!Res_loaded)
+    {
+        if (Load_Ressources() != 0) return false;
+    }
+    Actual_Level = "";
+    Actual_Levelnum = -1;
+    QFileInfo fileinfo(Map_file);
+
+    if (fileinfo.path() == MapDir)  // We are in the game's map directory
+    {
+
+        QString name = fileinfo.baseName();
+        bool name_valid;
+        int filenumber = name.toInt(&name_valid,10); //Check whether the file name (without extension) contains only decimal numbers
+
+        if (name_valid)
+        {
+            if (filenumber < Levelcode.Number_of_levels) //the filename contains a valid levelnumber
+            {
+            Actual_Level = Levelcode.Codelist[filenumber];
+            Actual_Levelnum = filenumber;
+            if (Get_Mapoptions(filenumber) == 0)  //There is data available
+            {
+                return true;
+            }
+            }
+        }
+    }
+    return false;
+}
+
+
+void Save()
+//Saves actual Mapdata
+{
+    FILE*                   f;
+    size_t                  IO_result;
+    QMessageBox             Errormsg;
+
+
+    if ((already_saved == false) || (Map_file == ""))
+        Map_file = QFileDialog::getSaveFileName(0,"Save History Line 1914-1918 map file",MapDir,"HL map files (*.fin)");
+
+    if (!Map_file.isEmpty() && !Map_file.isNull())
+    {
+        if ((!Map_file.contains(".fin")) && (!Map_file.contains(".FIN")))
+            Map_file = Map_file+".FIN";
+
+
+        if (Save_Mapdata(Map_file.toStdString().data()) != 0)
+        {
+            Errormsg.warning(0,"","I cannot save the map data in "+Map_file);
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+        QString SHPfile;
+        SHPfile = Map_file;
+        SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");
+
+        if (Create_shp(SHPfile.toStdString().data()) != 0)
+        {
+            Errormsg.warning(0,"","I cannot save the building data in "+SHPfile+"!");
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+
+
+
+        if (Get_actual_map_options()) //is this map already part of the game?
+        {
+            if (summer)
+             CODESDAT_buffer[(Actual_Levelnum*10)+8] = 0;
+            else
+             CODESDAT_buffer[(Actual_Levelnum*10)+8] = 2;
+
+            if (Player2)
+             CODESDAT_buffer[(Actual_Levelnum*10)+6] = 2;
+            else
+             CODESDAT_buffer[(Actual_Levelnum*10)+6] = 1;
+
+
+            QString                 C_Filename;
+
+            C_Filename = (GameDir + Code_name); //Create a C style filename for use of stdio
+            C_Filename.replace("/'", "\\'");
+
+            fopen_s(&f,C_Filename.toStdString().data(), "wb");
+
+            if (!f)
+            {
+             Errormsg.critical(0,"Error","Error writing to CODES.DAT!");
+             Errormsg.setFixedSize(500,200);
+             return;
+            }
+
+            IO_result = fwrite(CODESDAT_buffer, CODESDAT_size, 1, f); //Write buffer
+
+
+            if (IO_result != 1)
+            {
+             fclose(f);
+             Errormsg.critical(0,"Error","Error writing to CODES.DAT!");
+             Errormsg.setFixedSize(500,200);
+             return; //Write Error
+            }
+            fclose(f);
+
+
+        }
+        else
+        {
+            QString TMPfile;
+            TMPfile = Map_file;
+            TMPfile.replace(".fin",".tmp").replace(".FIN",".TMP");
+            fopen_s(&f,TMPfile.toStdString().data(),"wb");
+            if (!f)
+            {
+             Errormsg.critical(0,"Error","Error creating "+TMPfile);
+             Errormsg.setFixedSize(500,200);
+             return;
+            }
+            unsigned char season, twoplayermap;
+             if (summer) season = 0; else season = 1;
+            if (Player2) twoplayermap = 2; else twoplayermap = 1;
+
+            IO_result = fwrite(&season, sizeof(season), 1, f); //Write season
+            if (IO_result != 1)
+            {
+             fclose(f);
+             Errormsg.critical(0,"Error","Error writing to "+TMPfile);
+             Errormsg.setFixedSize(500,200);
+             return; //Write Error
+            }
+            IO_result = fwrite(&twoplayermap, sizeof(twoplayermap), 1, f); //Write number of players
+            if (IO_result != 1)
+            {
+             fclose(f);
+             Errormsg.critical(0,"Error","Error writing to "+TMPfile);
+             Errormsg.setFixedSize(500,200);
+             return; //Write Error
+            }
+            fclose(f);
+        }
+
+
+
+        changes = false; //All changes saved
+        already_saved = true;
+    }
+}
+
+
+
 int Load_Map()
 //Load a map file
 {
     QMessageBox              Errormsg;
     QString                  C_Filename;
+    FILE*                   f;
+    size_t                  IO_result;
 
     C_Filename = Map_file;
     C_Filename.replace("/'", "\\'");
@@ -302,11 +426,50 @@ int Load_Map()
         Errormsg.setFixedSize(500,200);
         memset(SHP.can_be_built,0,sizeof(SHP.can_be_built));
         Building_info = NULL;
-
         Create_building_record_from_map();
     }
     else
         Add_building_positions();
+
+
+    if (Get_actual_map_options()) //Is this map already part of the game
+    {
+        if (Mapoptions.season != 0)   //get season for this map from CODES.DAT
+            summer = false;
+        else
+            summer = true;
+
+        if (Mapoptions. map_type == 2) //get number of players
+            Player2 = true;
+        else
+            Player2 = false;
+    }
+    else
+    {
+        C_Filename.replace(".fin",".tmp").replace(".FIN",".TMP");
+        fopen_s(&f,C_Filename.toStdString().data(),"rb");
+        if (!f)
+        {
+            summer = true;
+            Player2 = true;
+            return 0;
+        }
+        unsigned char season, twoplayermap;
+
+        IO_result = fread(&season, sizeof(season), 1, f); //Read season
+        if (IO_result != 1)
+             summer = true;
+        else
+            if (season == 0) summer = true; else summer = false;
+
+        IO_result = fread(&twoplayermap, sizeof(twoplayermap), 1, f); //Read season
+        if (IO_result != 1)
+            Player2 = true;
+        else
+            if (twoplayermap == 2) Player2 = true; else Player2 = false;
+
+        fclose(f);
+    }
 
     return 0;
 }
@@ -479,7 +642,7 @@ void Create_Unitselection_window()
 
         for (int tc = 0; tc < Num_Units; tc++)
         {
-            Draw_Unit(tx*Tilesize,ty*Tilesize,tc*6,1,&UnitListImage);
+            Draw_Unit(tx*Tilesize,ty*Tilesize,(tc*6)+3,1,&UnitListImage);
 
             tx++;
             if (tx == 10)

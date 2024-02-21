@@ -16,6 +16,7 @@ class MainWindow : public QMainWindow
 
 public:
     MainWindow();
+    void Open_Map();
 
 protected:
 #ifndef QT_NO_CONTEXTMENU
@@ -24,11 +25,13 @@ protected:
 
     void closeEvent (QCloseEvent *event) override;
     void mousePressEvent (QMouseEvent *event) override;
+    void mouseDoubleClickEvent (QMouseEvent *event) override;
 
 
 private slots:
     void newFile_diag();
     void open_diag();
+    void open_by_code_diag();
     void save_diag();
     void saveas_diag();
     void add_diag();
@@ -43,6 +46,7 @@ private slots:
     void setScale_diag();
     void statistics_diag();
     void warning_diag();
+    void maptype_diag();
 
 
 private:
@@ -56,6 +60,7 @@ private:
     QMenu *configMenu;
     QAction *newAct;
     QAction *openAct;
+    QAction *openbyCodeAct;
     QAction *saveAct;
     QAction *saveasAct;
     QAction *addtogameAct;
@@ -71,6 +76,7 @@ private:
     QAction *buildableunitsAct;
     QAction *statisticsAct;
     QAction *warningAct;
+    QAction *maptypeAct;
     QLabel  *infoLabel;
 
 
