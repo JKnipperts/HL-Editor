@@ -12,4 +12,4 @@ This project required some reverse engineering effort to figure out the structur
 I have saved the findings as an article in the modding wiki:
 https://moddingwiki.shikadi.net/wiki/History_Line_1914-1918
 
-Many thanks to llm, tbc21, Nelson, grohfuda, moravec, struuunz , root_42 and everyone else at dosreloaded who helped and contributed to this project.
+Many thanks to llm, tbc21, Nelson, grohfuda, moravec, struuunz , root_42 and everyone else at dosreloaded.de who helped and contributed to this project.
