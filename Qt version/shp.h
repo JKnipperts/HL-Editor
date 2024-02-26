@@ -854,11 +854,11 @@ int Create_shp(std::string shpname)
                         Errormsg.warning(0,"Warning:","No data for factory "+QString::number(fi)+" found!");
                         Errormsg.setFixedSize(500,200);
                         //Try to fix the error
-                        if (Field.Part = 0x0C)
+                        if (Field.Part == 0x0C)
                             Bdata.Owner = 2;  //neutral
-                        if (Field.Part = 0x0D)
+                        if (Field.Part == 0x0D)
                             Bdata.Owner = 0;  //german
-                        if (Field.Part = 0x0E)
+                        if (Field.Part == 0x0E)
                             Bdata.Owner = 1;  //french
 
                         Bdata.Type = 1;
@@ -906,11 +906,11 @@ int Create_shp(std::string shpname)
                         Errormsg.setFixedSize(500,200);
 
                         //Try to fix the error
-                        if (Field.Part = 0x0F)
+                        if (Field.Part == 0x0F)
                             Bdata.Owner = 2;  //neutral
-                        if (Field.Part = 0x10)
+                        if (Field.Part == 0x10)
                             Bdata.Owner = 0;  //german
-                        if (Field.Part = 0x11)
+                        if (Field.Part == 0x11)
                             Bdata.Owner = 1;  //french
 
                         Bdata.Type = 2;
