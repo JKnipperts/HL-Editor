@@ -1,6 +1,2 @@
 Qt version of the History Line 1914-1918 editor
 The program is currently in beta testing. Therefore, there are currently more frequent updates of the files when errors and bugs have been fixed.
-
-Current Version is BETA 1.6
-
-A detailed description of the changes between the individual versions can be found as a comment at the beginning of main.cpp
