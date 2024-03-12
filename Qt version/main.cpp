@@ -1,11 +1,15 @@
 /*
- * HL Editor - Beta version 6
+ * HL Editor - Beta version 7
  * by Jan Knipperts (Dragonsphere /DOSReloaded)
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1.6:
+ * Version info BETA 1.7:
 *  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
+*
+*  Changes to BETA 1.6
+*  - Complete buildings can be places by selecting the entry and right clicking on the map.
+*  - fixed some dialog titles, removed help icons etc.
 *
 *  Changes to BETA 1.5
 *  - Fixed a bug in the display of german "ü"-Umlaut in the unit name.
@@ -83,7 +87,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "BETA 1.6";
+QString                  Version = "BETA 1.7";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -436,7 +440,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                      (selected_unit  == 0x35) ||
                      (selected_unit  == 0x3E) ||
                      (selected_unit  == 0x3F)))
-                        Correct_building_record_from_map(); //...Correct the building data record in memory
+                    Correct_building_record_from_map(); //...Correct the building data record in memory
 
                 Redraw_Field(hx,hy,Map.data[(field_pos*2)],Map.data[(field_pos*2)+1]);
                 MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
@@ -518,6 +522,59 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                   selected_building = Get_Buildings_info(field_pos);
                   Create_building_configuration_window();
                 }
+            }
+
+            if  (((selected_tile == 0x01) || (selected_tile == 0x02)) ||
+                 ((selected_tile >= 0x0C) && (selected_tile <= 0x11)) ||
+                 (selected_tile == 0x15))
+            {
+
+                if ((selected_tile == 0x01) || (selected_tile == 0x02))
+                {
+                    Change_Mapdata(hx,hy,selected_tile,0xFF);
+                    Change_Mapdata(hx-1,hy+(hx%2),0x05,0xFF);
+                    Change_Mapdata(hx,hy+1,0x03,0xFF);
+                    Change_Mapdata(hx+1,hy+(hx%2),0x07,0xFF);
+                    Change_Mapdata(hx-1,hy+(hx%2)+1,0x06,0xFF);
+                    Change_Mapdata(hx,hy+2,0x04,0xFF);
+                    Change_Mapdata(hx+1,hy+(hx%2)+1,0x08,0xFF);
+                }
+
+                if ((selected_tile >= 0x0c) && (selected_tile <= 0x0E))
+                {
+                    Change_Mapdata(hx,hy,selected_tile,0xFF);
+
+                    if (hx%2 == 1)
+                    {
+                        Change_Mapdata(hx-1,hy,0x09,0xFF);
+                        Change_Mapdata(hx-1,hy+1,0x0A,0xFF);
+                    }
+                    else
+                    {
+                        Change_Mapdata(hx-1,hy-1,0x09,0xFF);
+                        Change_Mapdata(hx-1,hy,0x0A,0xFF);
+                    }
+                    Change_Mapdata(hx-2,hy,0x0B,0xFF);
+                }
+
+                if ((selected_tile >= 0x0F) && (selected_tile <= 0x11))
+                {
+                    Change_Mapdata(hx,hy,selected_tile,0xFF);
+                    Change_Mapdata(hx-1,hy+(hx%2),0x13,0xFF);
+                    Change_Mapdata(hx,hy+1,0x12,0xFF);
+                    Change_Mapdata(hx+1,hy+(hx%2),0x14,0xFF);
+                }
+
+
+                if (selected_tile == 0x15)
+                {
+                    Change_Mapdata(hx,hy,selected_tile,0xFF);
+                    Change_Mapdata(hx-1,hy+(hx%2),0x17,0xFF);
+                    Change_Mapdata(hx,hy+1,0x16,0xFF);
+                    Change_Mapdata(hx+1,hy+(hx%2),0x18,0xFF);
+                }
+
+                Correct_building_record_from_map(); //...Correct the building data record in memory
             }
 
             MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
@@ -828,9 +885,14 @@ void MainWindow::open_by_code_diag()
     }
 
     bool ok;
-    QString levelcode = QInputDialog::getText(this, tr("Open map by levelcode:"),
-                                              tr("Code of the map you want to load:"), QLineEdit::Normal,
-                                              "", &ok);
+
+
+    QString levelcode = QInputDialog::getItem(this, tr("Open map by levelcode:"),
+                                              "Please select a map:", Levelcode.Codelist, 0, false, &ok,Qt::Tool);
+
+//QInputDialog::getText(this, tr("Open map by levelcode:"),
+//                                              tr("Code of the map you want to load:"), QLineEdit::Normal,
+//                                              "", &ok,Qt::Tool);
     if (ok && !levelcode.isEmpty())
     {
         if (!Check_levelcode(levelcode))
@@ -1156,7 +1218,8 @@ void MainWindow::setScale_diag()
         0,
         10,
         1,
-        &ok );
+        &ok,
+        Qt::Tool);
 
     if (ok)
     {
@@ -1205,9 +1268,9 @@ void MainWindow::add_diag()
         Check_used_tiles();
 
         bool ok;
-        QString levelcode = QInputDialog::getText(this, tr("QInputDialog::getText()"),
+        QString levelcode = QInputDialog::getText(this, tr("Add map to game"),
                                                   tr("Enter a levelcode for your map (5 letters):"), QLineEdit::Normal,
-                                                  "", &ok);
+                                                  "", &ok,Qt::Tool);
         if (ok && !levelcode.isEmpty())
         {
             if (!Check_levelcode(levelcode))
@@ -1302,7 +1365,7 @@ void MainWindow::add_diag()
 
 
             QString item = QInputDialog::getItem(this, tr("Type of computer opponent"),
-                                                 tr("You have configured your map as a single player map. Please select the type of computer opponent (.COM file) for your map:"), items, 0, false, &ok);
+                                                 tr("You have configured your map as a single player map. Please select the type of computer opponent (.COM file) for your map:"), items, 0, false, &ok,Qt::Tool);
             if (ok && !item.isEmpty())
             {
 
@@ -1409,7 +1472,7 @@ void MainWindow::map_resize_diag()
 
 
     QString item = QInputDialog::getItem(this, tr("Select map size"),
-                                         tr("Map width x height = "), items, current, false, &ok);
+                                         tr("Map width x height = "), items, current, false, &ok,Qt::Tool);
     if (ok && !item.isEmpty())
     {
 

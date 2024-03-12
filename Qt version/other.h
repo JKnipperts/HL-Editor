@@ -548,6 +548,22 @@ void Redraw_Field(int x, int y,int part, int unit)
 }
 
 
+
+void Change_Mapdata(int x, int y,unsigned char part, unsigned char unit)
+{
+    if ((x < (Map.width-1)) && (y < (Map.height-1)))  //Is the field on the map?
+    {
+        int offset;
+        offset = ((y*Map.width)+x)*2;
+        Map.data[offset] = part;
+        Map.data[offset+1] = unit;
+        Redraw_Field(x,y,part,unit);
+    }
+}
+
+
+
+
 void ShowGrid()
 // Draws a frame around each hex field to make them more visible
 {
