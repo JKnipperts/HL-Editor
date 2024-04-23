@@ -434,10 +434,10 @@ int Load_Map()
 
     if (Get_actual_map_options()) //Is this map already part of the game
     {
-        if (Mapoptions.season != 0)   //get season for this map from CODES.DAT
-            summer = false;
-        else
+        if ((Mapoptions.season == 0) || (Mapoptions.season == 1))  //get season for this map from CODES.DAT
             summer = true;
+        else
+            summer = false;
 
         if (Mapoptions. map_type == 2) //get number of players
             Player2 = true;
@@ -462,7 +462,7 @@ int Load_Map()
         else
             if (season == 0) summer = true; else summer = false;
 
-        IO_result = fread(&twoplayermap, sizeof(twoplayermap), 1, f); //Read season
+        IO_result = fread(&twoplayermap, sizeof(twoplayermap), 1, f); //Read number of players
         if (IO_result != 1)
             Player2 = true;
         else
@@ -738,15 +738,22 @@ void Create_buildable_units_window()
         BuildableImageScaled = BuildableImage.scaled(BuildableImage.width()*Scale_factor,BuildableImage.height()*Scale_factor); //Create a scaled version of it
 
 
-        QLabel *label = new QLabel();
-        QHBoxLayout *layout = new QHBoxLayout();
+        QLabel *label = new QLabel();       
         label->setPixmap(QPixmap::fromImage(BuildableImageScaled));
 
         buildablescrollArea = new(QScrollArea);
         buildablescrollArea->setBackgroundRole(QPalette::Dark);
         buildablescrollArea->setWidget(label);
         buildablescrollArea->setVisible(true);
+
+        buildable_unitname = new QLabel();
+        buildable_unitname->setText("");
+
+        QVBoxLayout *layout = new QVBoxLayout();
         layout->addWidget(buildablescrollArea);
+        layout->addWidget(buildable_unitname);
+
+
         buildable->setLayout(layout);
 
         buildable->show();

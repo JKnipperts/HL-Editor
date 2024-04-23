@@ -35,6 +35,7 @@ private slots:
     void save_diag();
     void saveas_diag();
     void add_diag();
+    void remove_diag();
     void grid_diag();
     void tilewindow_diag();
     void unitwindow_diag();
@@ -64,6 +65,7 @@ private:
     QAction *saveAct;
     QAction *saveasAct;
     QAction *addtogameAct;
+    QAction *removefromgameAct;
     QAction *exitAct;
     QAction *setPathAct;
     QAction *setScaleFactorAct;

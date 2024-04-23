@@ -136,7 +136,7 @@ int Get_Levelcodes()
             for (o = 0; o < 5; o++)
             {
                 ASCII = CODESDAT_buffer[offset+o];
-                code = code + QChar::fromLatin1(ASCII+48); //17 = "A" in CODES.DAT, 65 (ASCII "A")-17 = 48;
+                code = code + QChar::fromLatin1(ASCII+48); //17 (0x11) = "A" in CODES.DAT, 65 (ASCII "A")-17 = 48;
             }
             offset = offset+10; //Skip data, we just want the passwords here
             Levelcode.Codelist.append(code);
@@ -267,6 +267,107 @@ int Add_map(std::string codes_filename, QString newcode)
 
     return 0;
 }
+
+
+int Remove_map(std::string codes_filename, QString removecode)
+{
+    FILE*                   f;
+    size_t                  IO_result;
+    int                     i,sp;
+    bool                    brokencampaign = false;
+
+    if (CODESDAT_buffer != NULL)
+    {
+        for (i = 0; i < Levelcode.Codelist.count(); i++)
+        {
+            if (QString::compare(Levelcode.Codelist[i], removecode, Qt::CaseInsensitive) == 0) break;
+        }
+
+        if ((i >= Levelcode.Codelist.count()) || (unsigned (i*10) > CODESDAT_size)) //The given code does not exist in Codes.dat
+        {
+            return -1;
+        }
+
+       int remove_pos = i*10;
+
+        if ((unsigned) remove_pos < (CODESDAT_size-10))
+        {
+            for (i = remove_pos; (unsigned) i < CODESDAT_size-10; i++)
+            CODESDAT_buffer[i] = CODESDAT_buffer[i+10];
+        }
+
+        CODESDAT_size = CODESDAT_size-10;
+
+
+        for (i = 0; (unsigned) i < (CODESDAT_size/10); i++)
+        {
+            if (CODESDAT_buffer[(i*10)+8] == 1) CODESDAT_buffer[(i*10)+8] = 0;
+            if (CODESDAT_buffer[(i*10)+7] == 0) CODESDAT_buffer[(i*10)+7] = 1;
+
+            if (i <= 47)
+            {
+              if (CODESDAT_buffer[(i*10)+6] != 1)
+              {
+                brokencampaign = true;
+                sp = i-1;
+              }
+            }
+        }
+
+        if (brokencampaign)
+        {
+            QMessageBox              Errormsg;
+            Errormsg.warning(0,"Warning:","A map has been removed from the single-player campaign. This will lead to problems when the campaign is played, as video sequences etc. can no longer be assigned correctly.");
+            Errormsg.setFixedSize(500,200);
+
+            CODESDAT_buffer[(sp*10)+8] = 1;  //New end of french campaign;
+            CODESDAT_buffer[((sp/2)*10)+8] = 1; //New end of german campaign;
+            CODESDAT_buffer[(sp*10)+7] = 0; //New end of single player campaign
+        }
+        else
+        {
+            CODESDAT_buffer[238] = 1;  //End of german campaign
+            CODESDAT_buffer[468] = 1;  //End of french campaign
+            CODESDAT_buffer[467] = 0;  //End of single player campaign
+        }
+
+
+         CODESDAT_buffer[CODESDAT_size-3] = 0; //Set end of campaign marker for two player and user maps;
+
+
+        fopen_s(&f, codes_filename.data(), "wb");
+
+        if (!f)
+        {
+            return -1;
+        }
+        IO_result = fwrite(CODESDAT_buffer,CODESDAT_size,1, f);
+        if (IO_result != 1)
+        {
+             fclose(f);
+            return -2; //Write Error
+        }
+
+        fclose(f);
+
+        //Re-read CODES.DAT into memory
+
+        if (Read_Codesdat(codes_filename) != 0) return -3;
+        Get_Levelcodes();  //Update our list of levelcodes
+    }
+    else
+        return -4;
+
+
+
+    return 0;
+
+}
+
+
+
+
+
 
 int Get_Mapoptions(int levelnum)  //Returns the additional information for a level from the code.dat. These are returned in "Mapoptions".
 {

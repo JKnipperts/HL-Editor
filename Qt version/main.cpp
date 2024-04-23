@@ -1,15 +1,19 @@
 /*
- * HL Editor - Beta version 7
+ * HL Editor - 1st Release Candidate (Beta 1.7)
  * by Jan Knipperts (Dragonsphere /DOSReloaded)
  *
  * A map editor for the game History Line 1914-1918 by BlueByte
  *
- * Version info BETA 1.7:
+ * Version info:
 *  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
 *
 *  Changes to BETA 1.6
 *  - Complete buildings can be places by selecting the entry and right clicking on the map.
 *  - fixed some dialog titles, removed help icons etc.
+*  - corrected handling of "end of campaign" marker
+*  - The name of the selected unit is now also displayed in the window for setting the buildable units
+*  - existing maps can be removed from the game
+*  - Warning if single parts of factories or depots are placed
 *
 *  Changes to BETA 1.5
 *  - Fixed a bug in the display of german "ü"-Umlaut in the unit name.
@@ -87,7 +91,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "BETA 1.7";
+QString                  Version = "RC 1";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -142,6 +146,7 @@ unsigned char            r1,r2;
 
 QRect                    screenrect;                        //A QRect to save the screen geometry and position windows accordingly.
 QLabel                   *unit_name_text;                   //Text label to display unit name on mouse over
+QLabel                   *buildable_unitname;
 
 int                      Scale_factor = 2;                  //Default scaling factor for the old VGA bitmaps
 unsigned char            selected_tile = 0x00;              //Define "Plains" as default tile
@@ -367,7 +372,18 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                 if ((!no_tilechange) &&  (Map.data[field_pos*2] != selected_tile))
                 {                   
                     Map.data[field_pos*2] = (unsigned char) selected_tile;
-                    changes = true; //There are unsaved changes now                                           
+                    changes = true; //There are unsaved changes now
+
+                    if (show_warnings)
+                    {
+                        if (((selected_tile >= 0x12) && (selected_tile <= 0x14)) ||
+                            ((selected_tile >= 0x09) && (selected_tile <= 0x0B)))
+                        {
+                            QMessageBox              Warning;
+                            Warning.warning(this,"Warning:","Attention! Building parts of factories and depots that do not have an associated entrance and are not arranged as intended can still be opened in the game and then contain random garbage data.");
+                            Warning.setFixedSize(500,200);
+                        }
+                    }
                 }
 
 
@@ -523,58 +539,61 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                   Create_building_configuration_window();
                 }
             }
-
-            if  (((selected_tile == 0x01) || (selected_tile == 0x02)) ||
-                 ((selected_tile >= 0x0C) && (selected_tile <= 0x11)) ||
-                 (selected_tile == 0x15))
+            else
             {
 
-                if ((selected_tile == 0x01) || (selected_tile == 0x02))
-                {
-                    Change_Mapdata(hx,hy,selected_tile,0xFF);
-                    Change_Mapdata(hx-1,hy+(hx%2),0x05,0xFF);
-                    Change_Mapdata(hx,hy+1,0x03,0xFF);
-                    Change_Mapdata(hx+1,hy+(hx%2),0x07,0xFF);
-                    Change_Mapdata(hx-1,hy+(hx%2)+1,0x06,0xFF);
-                    Change_Mapdata(hx,hy+2,0x04,0xFF);
-                    Change_Mapdata(hx+1,hy+(hx%2)+1,0x08,0xFF);
-                }
 
-                if ((selected_tile >= 0x0c) && (selected_tile <= 0x0E))
+                if  (((selected_tile == 0x01) || (selected_tile == 0x02)) ||
+                     ((selected_tile >= 0x0C) && (selected_tile <= 0x11)) ||
+                    (selected_tile == 0x15))
                 {
-                    Change_Mapdata(hx,hy,selected_tile,0xFF);
 
-                    if (hx%2 == 1)
+                    if ((selected_tile == 0x01) || (selected_tile == 0x02))
                     {
-                        Change_Mapdata(hx-1,hy,0x09,0xFF);
-                        Change_Mapdata(hx-1,hy+1,0x0A,0xFF);
+                        Change_Mapdata(hx,hy,selected_tile,0xFF);
+                        Change_Mapdata(hx-1,hy+(hx%2),0x05,0xFF);
+                        Change_Mapdata(hx,hy+1,0x03,0xFF);
+                        Change_Mapdata(hx+1,hy+(hx%2),0x07,0xFF);
+                        Change_Mapdata(hx-1,hy+(hx%2)+1,0x06,0xFF);
+                        Change_Mapdata(hx,hy+2,0x04,0xFF);
+                        Change_Mapdata(hx+1,hy+(hx%2)+1,0x08,0xFF);
                     }
-                    else
+
+                    if ((selected_tile >= 0x0C) && (selected_tile <= 0x0E))
                     {
-                        Change_Mapdata(hx-1,hy-1,0x09,0xFF);
-                        Change_Mapdata(hx-1,hy,0x0A,0xFF);
+                        Change_Mapdata(hx,hy,selected_tile,0xFF);
+
+                        if (hx%2 == 1)
+                        {
+                            Change_Mapdata(hx-1,hy,0x09,0xFF);
+                            Change_Mapdata(hx-1,hy+1,0x0A,0xFF);
+                        }
+                        else
+                        {
+                            Change_Mapdata(hx-1,hy-1,0x09,0xFF);
+                            Change_Mapdata(hx-1,hy,0x0A,0xFF);
+                        }
+                        Change_Mapdata(hx-2,hy,0x0B,0xFF);
                     }
-                    Change_Mapdata(hx-2,hy,0x0B,0xFF);
+
+                    if ((selected_tile >= 0x0F) && (selected_tile <= 0x11))
+                    {
+                        Change_Mapdata(hx,hy,selected_tile,0xFF);
+                        Change_Mapdata(hx-1,hy+(hx%2),0x13,0xFF);
+                        Change_Mapdata(hx,hy+1,0x12,0xFF);
+                        Change_Mapdata(hx+1,hy+(hx%2),0x14,0xFF);
+                    }
+
+                    if (selected_tile == 0x15)
+                    {
+                        Change_Mapdata(hx,hy,selected_tile,0xFF);
+                        Change_Mapdata(hx-1,hy+(hx%2),0x17,0xFF);
+                        Change_Mapdata(hx,hy+1,0x16,0xFF);
+                        Change_Mapdata(hx+1,hy+(hx%2),0x18,0xFF);
+                    }
+
+                    Correct_building_record_from_map(); //...Correct the building data record in memory
                 }
-
-                if ((selected_tile >= 0x0F) && (selected_tile <= 0x11))
-                {
-                    Change_Mapdata(hx,hy,selected_tile,0xFF);
-                    Change_Mapdata(hx-1,hy+(hx%2),0x13,0xFF);
-                    Change_Mapdata(hx,hy+1,0x12,0xFF);
-                    Change_Mapdata(hx+1,hy+(hx%2),0x14,0xFF);
-                }
-
-
-                if (selected_tile == 0x15)
-                {
-                    Change_Mapdata(hx,hy,selected_tile,0xFF);
-                    Change_Mapdata(hx-1,hy+(hx%2),0x17,0xFF);
-                    Change_Mapdata(hx,hy+1,0x16,0xFF);
-                    Change_Mapdata(hx+1,hy+(hx%2),0x18,0xFF);
-                }
-
-                Correct_building_record_from_map(); //...Correct the building data record in memory
             }
 
             MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
@@ -890,15 +909,12 @@ void MainWindow::open_by_code_diag()
     QString levelcode = QInputDialog::getItem(this, tr("Open map by levelcode:"),
                                               "Please select a map:", Levelcode.Codelist, 0, false, &ok,Qt::Tool);
 
-//QInputDialog::getText(this, tr("Open map by levelcode:"),
-//                                              tr("Code of the map you want to load:"), QLineEdit::Normal,
-//                                              "", &ok,Qt::Tool);
     if (ok && !levelcode.isEmpty())
     {
         if (!Check_levelcode(levelcode))
         {
           QMessageBox   Errormsg;
-          Errormsg.critical(this,"","Code must be five letters!");
+          Errormsg.critical(this,"","The selected levelcode is invalid! Are the game files corrupted?");
           Errormsg.setFixedSize(500,200);
             return;
         }
@@ -914,14 +930,6 @@ void MainWindow::open_by_code_diag()
               fnum = i;
               break;
             }
-        }
-
-        if (fnum == 0)
-        {
-            QMessageBox   Errormsg;
-            Errormsg.critical(this,"","Unfortunately I could not find a map with the code "+levelcode+"!");
-            Errormsg.setFixedSize(500,200);
-            return;
         }
 
         if (fnum < 10)
@@ -1353,62 +1361,61 @@ void MainWindow::add_diag()
                 return;
             }
 
-            bool            ok;
 
-            QStringList     items;
-
-            items << "Type I"
-                  << "Type II"
-                  << "Type III"
-                  << "Type IV";
-
-
-
-            QString item = QInputDialog::getItem(this, tr("Type of computer opponent"),
-                                                 tr("You have configured your map as a single player map. Please select the type of computer opponent (.COM file) for your map:"), items, 0, false, &ok,Qt::Tool);
-            if (ok && !item.isEmpty())
+            if (Player2 == false)
             {
+                bool            ok;
 
-                if (item == "Type I"){Comfile = "00.COM";}
-                if (item == "Type II"){Comfile = "21.COM";}
-                if (item == "Type III"){Comfile = "45.COM";}
-                if (item == "Type IV"){Comfile = "22.COM";}
+                QStringList     items;
 
-                Comfile = MapDir+"/"+Comfile;
-                Comfile.replace("/'", "\\'");
+                items << "Type I"
+                      << "Type II"
+                    << "Type III"
+                    << "Type IV";
 
-                if (!QFile::exists(Comfile))
+                QString item = QInputDialog::getItem(this, tr("Type of computer opponent"),
+                                                 tr("You have configured your map as a single player map. Please select the type of computer opponent (.COM file) for your map:"), items, 0, false, &ok,Qt::Tool);
+                if (ok && !item.isEmpty())
                 {
-                  Comfile = Comfile.toLower();
-                  if (!QFile::exists(Comfile))
-                  {
+
+                    if (item == "Type I"){Comfile = "00.COM";}
+                    if (item == "Type II"){Comfile = "21.COM";}
+                    if (item == "Type III"){Comfile = "45.COM";}
+                    if (item == "Type IV"){Comfile = "22.COM";}
+
+                    Comfile = MapDir+"/"+Comfile;
+                    Comfile.replace("/'", "\\'");
+
+                    if (!QFile::exists(Comfile))
+                    {
+                        Comfile = Comfile.toLower();
+                        if (!QFile::exists(Comfile))
+                        {
+                            QMessageBox   Errormsg;
+                            Errormsg.critical(this,"","File "+Comfile+" not found!");
+                            Errormsg.setFixedSize(500,200);
+                            return;
+                        }
+                    }
+
+                    Newfile = Map_file;
+                    Newfile.replace(".fin",".com").replace(".FIN",".COM");
+                    QFile::copy(Comfile, Newfile);
+
+                    if (!QFile::exists(Newfile))
+                    {
                         QMessageBox   Errormsg;
-                        Errormsg.critical(this,"","File "+Comfile+" not found!");
+                        Errormsg.critical(this,"","Failed to create "+Newfile+"!");
                         Errormsg.setFixedSize(500,200);
                         return;
-                  }
-                }
-
-                Newfile = Map_file;
-                Newfile.replace(".fin",".com").replace(".FIN",".COM");
-                QFile::copy(Comfile, Newfile);
-
-                if (!QFile::exists(Newfile))
-                {
-                  QMessageBox   Errormsg;
-                  Errormsg.critical(this,"","Failed to create "+Newfile+"!");
-                  Errormsg.setFixedSize(500,200);
-                  return;
+                    }
                 }
             }
 
-
-            Actual_Level = levelcode;                                    
+            Actual_Level = levelcode;
             changes = false;
             already_saved = true;
-
             setWindowTitle(Title+" "+Actual_Level);
-
 
         }
     }
@@ -1418,6 +1425,178 @@ void MainWindow::add_diag()
         Errormsg.warning(this,"","There's nothing I could add to the game.... Why don't you load a map first or create a new one?");
         Errormsg.setFixedSize(500,200);
     }
+}
+
+
+void MainWindow::remove_diag()
+{
+    QString R_SHPfile, R_Mapfile, R_Comfile, R_Codefile, R_Hifile;
+    int old_maxlevel;
+
+    if (!Res_loaded)
+    {
+        if (Load_Ressources() != 0)
+        {
+            QMessageBox              Errormsg;
+            Errormsg.critical(this,"Error","Failed to load bitmaps from the game!");
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+    }
+
+    bool ok;
+
+
+    QString R_levelcode = QInputDialog::getItem(this, tr("Remove map from game"),
+                                              "Which map should be removed from the game?", Levelcode.Codelist, 0, false, &ok,Qt::Tool);
+
+    if (ok && !R_levelcode.isEmpty())
+    {
+        if (!Check_levelcode(R_levelcode))
+        {
+            QMessageBox   Errormsg;
+            Errormsg.critical(this,"","The selected levelcode is invalid! Are the game files corrupted?");
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+
+        int i;
+        int fnum;
+        fnum = 0;
+
+        for (i=0;i < Levelcode.Codelist.count(); i++)
+        {
+            if (QString::compare(Levelcode.Codelist[i], R_levelcode, Qt::CaseInsensitive) == 0)
+            {
+                fnum = i;
+                break;
+            }
+        }
+
+        R_Codefile = (GameDir + Code_name); //Create a C style filename for use of stdio
+        R_Codefile.replace("/'", "\\'");
+
+        old_maxlevel = Levelcode.Number_of_levels;
+
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, Title, "All references to the map "+R_levelcode+" will be removed from the game files and all files belonging to the map will be deleted. Are you sure?",
+                                      QMessageBox::Yes|QMessageBox::No);
+        if (reply == QMessageBox::No)
+            return;
+
+        if (Remove_map(R_Codefile.toStdString().data(), R_levelcode) != 0)
+        {
+            QMessageBox   Errormsg;
+            Errormsg.critical(this,"","Failed to update the CODES.DAT file!");
+            Errormsg.setFixedSize(500,200);
+            return;
+        }
+
+        if (fnum < 10)
+            R_Mapfile = "0"+QString::number(fnum);
+        else
+            R_Mapfile = QString::number(fnum);
+
+        R_Mapfile = R_Mapfile+".fin" ;
+        R_Mapfile = MapDir+"/"+R_Mapfile;
+        R_Mapfile.replace("/'", "\\'");
+        R_SHPfile = R_Mapfile;
+        R_SHPfile.replace(".fin",".shp").replace(".FIN",".SHP");
+        R_Comfile = R_Mapfile;
+        R_Comfile.replace(".fin",".com").replace(".FIN",".COM");
+        R_Hifile = R_Mapfile;
+        R_Hifile.replace(".fin",".hi").replace(".FIN",".HI");
+
+        if (QFile::exists(R_Mapfile))
+            QFile::remove(R_Mapfile);
+        if (QFile::exists(R_SHPfile))
+            QFile::remove(R_SHPfile);
+        if (QFile::exists(R_Comfile))
+            QFile::remove(R_Comfile);
+        if (QFile::exists(R_Hifile))
+            QFile::remove(R_Hifile);
+
+
+        //Alle umbenennen
+
+        QString orig_file, new_file;
+
+        if (fnum < old_maxlevel)
+        {
+            for (i = fnum+1; i <= old_maxlevel; i++)
+            {
+                if (i < 10)
+                    orig_file = "0"+QString::number(i);
+                else
+                    orig_file = QString::number(i);
+
+                if ((i-1) < 10)
+                    new_file = "0"+QString::number(i-1);
+                else
+                    new_file = QString::number(i-1);
+
+
+                orig_file = MapDir+"/"+orig_file;
+                orig_file.replace("/'", "\\'");
+                new_file = MapDir+"/"+new_file;
+                new_file.replace("/'", "\\'");
+
+
+                if (QFile::exists(orig_file+".FIN"))
+                {
+                    QFile::rename(orig_file+".FIN",new_file+".FIN");
+                }
+                else
+                {
+                    if (QFile::exists(orig_file+".fin"))
+                        QFile::rename(orig_file+".fin",new_file+".fin");
+                }
+
+                if (QFile::exists(orig_file+".SHP"))
+                {
+                    QFile::rename(orig_file+".SHP",new_file+".SHP");
+                }
+                else
+                {
+                    if (QFile::exists(orig_file+".shp"))
+                        QFile::rename(orig_file+".shp",new_file+".shp");
+                }
+
+                if (QFile::exists(orig_file+".COM"))
+                {
+                    QFile::rename(orig_file+".COM",new_file+".COM");
+                }
+                else
+                {
+                    if (QFile::exists(orig_file+".com"))
+                        QFile::rename(orig_file+".com",new_file+".com");
+                }
+
+                if (QFile::exists(orig_file+".HI"))
+                {
+                    QFile::rename(orig_file+".HI",new_file+".HI");
+                }
+                else
+                {
+                    if (QFile::exists(orig_file+".hi"))
+                        QFile::rename(orig_file+".hi",new_file+".hi");
+                }
+            }
+        }
+
+        if (Map.loaded == true)
+        {
+            if (Actual_Level == R_levelcode)
+            {
+                setWindowTitle(Title+" "+Author+" - Version: "+Version);
+                Actual_Level = "";
+                changes = true;
+                already_saved = false;
+           }
+        }
+    }
+
+    return;
 }
 
 
@@ -1718,12 +1897,12 @@ void MainWindow::createActions()
     newAct->setStatusTip(tr("Create a new map"));
     connect(newAct, &QAction::triggered, this, &MainWindow::newFile_diag);
 
-    openAct = new QAction(tr("&Open..."), this);
+    openAct = new QAction(tr("&Open map by file"), this);
     openAct->setShortcuts(QKeySequence::Open);
     openAct->setStatusTip(tr("Open an existing map"));
     connect(openAct, &QAction::triggered, this, &MainWindow::open_diag);
 
-    openbyCodeAct = new QAction(tr("Open map by Levelcode"),this);
+    openbyCodeAct = new QAction(tr("Open map by levelcode"),this);
     openbyCodeAct->setStatusTip(tr("Open an existing map by its ingame levelcode"));
     connect(openbyCodeAct, &QAction::triggered, this, &MainWindow::open_by_code_diag);
 
@@ -1732,13 +1911,17 @@ void MainWindow::createActions()
     saveAct->setStatusTip(tr("Save the map to disk"));
     connect(saveAct, &QAction::triggered, this, &MainWindow::save_diag);
 
-    saveasAct = new QAction(tr("Save as..."), this);
+    saveasAct = new QAction(tr("Save map as..."), this);
     saveasAct->setStatusTip(tr("Save the map to a new file"));
     connect(saveasAct, &QAction::triggered, this, &MainWindow::saveas_diag);
 
     addtogameAct = new QAction(tr("&Add map to game"), this);
     addtogameAct->setStatusTip(tr("Adds your map to the game"));
     connect(addtogameAct, &QAction::triggered, this, &MainWindow::add_diag);
+
+    removefromgameAct = new QAction(tr("&Remove map from game"), this);
+    removefromgameAct->setStatusTip(tr("Removes a map from the game"));
+    connect(removefromgameAct, &QAction::triggered, this, &MainWindow::remove_diag);
 
     exitAct = new QAction(tr("E&xit"), this);
     exitAct->setShortcuts(QKeySequence::Quit);
@@ -1815,6 +1998,7 @@ void MainWindow::createMenus()
     fileMenu->addAction(saveAct);
     fileMenu->addAction(saveasAct);
     fileMenu->addAction(addtogameAct);
+    fileMenu->addAction(removefromgameAct);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAct);
 
@@ -1830,11 +2014,10 @@ void MainWindow::createMenus()
     editMenu->addAction(showunitwindowAct);
     editMenu->addAction(statisticsAct);
 
-
     configMenu = menuBar()->addMenu(tr("&Settings"));
     configMenu->addAction(setPathAct);
     configMenu->addAction(setScaleFactorAct);
-    configMenu->addAction(warningAct);
+    configMenu->addAction(warningAct);            
 }
 
 
@@ -1966,23 +2149,23 @@ void buildablewindow::mousePressEvent(QMouseEvent *event)
          int fy = (event->pos().y()-widgetRect.top()+pos_y) / (Tilesize*Scale_factor);
 
          int unit = ((fy*10)+fx);     //Calc correct unit number
+         buildable_unitname->setText(Unit_Name[unit]);
 
-
-        if (unit <= Num_Units)
-        {
+         if (unit <= Num_Units)
+         {
             if (SHP.can_be_built[unit] == 0)
                 SHP.can_be_built[unit] = 1;
             else
                 SHP.can_be_built[unit] = 0;
 
-        }
+         }
 
 
-        int tx = 0;
-        int ty = 0;
+         int tx = 0;
+         int ty = 0;
 
-        for (int tc = 0; tc < Num_Units; tc++)
-        {
+         for (int tc = 0; tc < Num_Units; tc++)
+         {
             if (SHP.can_be_built[tc] == 0)
                 Draw_Unit(tx*Tilesize,ty*Tilesize,tc*6,1,&BuildableImage);
             else
