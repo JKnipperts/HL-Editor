@@ -1,0 +1,71 @@
+﻿Changes made between the different versions of the program:
+
+1.0:
+  - Fixed a small bug that grassland was added when enlarging an ocean map.
+  - Fixed a bug that allowed building parts to be placed outside the map.
+  - Fixed a bug that corrupted the contents of buildings when new or many buildings were placed
+  - Fixed a bug that caused an incorrect scaling factor to be read from the configuration file
+  - When selecting the computer opponent, the .COM file is now selected by checksum and no longer by file name.
+  - Fixed a bug that some dialogs open in the background.
+  - Fixed a bug that made the grid allways shown after replacing tiles.
+  - The factor for scaling the VGA bitmaps from the game can now also be specified as a decimal number with a trailing digit.
+  - In the Tile window, basic tiles and extanded tiles have been visibly separated
+
+BETA 7:
+  - Complete buildings can be places by selecting the entry and right clicking on the map.
+  - Fixed some dialog titles, removed help icons from window titlebars etc.
+  - Corrected handling of "end of campaign" marker
+  - The name of the selected unit is now also displayed in the window for setting the buildable units
+  - NEW FEATURE: Existing maps can be removed from the game
+  - A warning is issued if single parts of factories or depots are placed
+
+BETA 6:
+  - Fixed a bug in the display of german "ü"-Umlaut in the unit name (If the German version of the game is used).
+  - Fixed German units alignement in the selection window
+  - NEW FEATURE: Now the terrain under a unit can also be changed without deleting it. Units can now be deleted by double-clicking on them.
+  - Resources and units in the building are now retained when a building is replaced by another building.
+  - Fixed a bug in the assignment of building data when buildings were replaced by others.
+  - NEW FEATURE: Maps can now also be loaded via their level code
+  - NEW FEATURE: The season and map type for in-game maps is read from the Codes.dat file.
+    For cards that have not yet been added to the game, a temp file is created to save the season and card type.
+  - NEW FEATURE: It is now possible to create singelplayer maps with computer opponents.
+  - Fixed setting of the "End of campaign"-marker when adding new maps to the game.
+
+BETA 5:
+  - NEW FEATURE: Map info / Statistics added
+  - Fixed a bug that confused the assignment of fields to buildings when changing the map size
+  - A warning is issued when adding to the game and when calling up the statistics if more terrain graphics have been used than the game can process.
+  - A warning is issued if units are placed on fields that are unsuitable for them.
+  - NEW FEATURE: Warnings can be switched off in the settings.
+
+BETA 4:
+  - Fixed a bug in TPWM_unpack that caused writing attempts outside the buffer in some cases.
+  - When creating a new map, you will now be asked whether it should be created as an ocean or a land map.
+  - Optimized accuracy when selecting or placing fields or units with the mouse
+  - For Linux compatibility, a separate check is now also carried out for lower-case file names when loading the game files.
+
+BETA 3:
+  - NEW FEATURE: Units in buildings can now be removed with the right mouse button
+  - Fields for units in buildings are now rectangular to make them easier to assign
+  - Fixed a bug that prevented changing the map size in some cases
+  - Improved handling of the cancel button for QFileDialogs
+  - If the scaling factor is changed, the child windows are now also redrawn accordingly
+  - Reference to beta version and greetings added
+
+BETA 2:
+  - Name of selected unit is shown in the unit selection window
+  - Fixed bug in handling of not saved transport units in the original game files
+  - New level codes are being checked
+  - Query whether unsaved changes should be saved when exiting or reloading
+  - some small improvements in the code
+  - New messages. For example, an attempt is made to save and no map has been loaded or created beforehand
+
+BETA 1:
+ - Fixed bug: When importing a map into the game, SHP data was not saved correctly.
+ - Fixed bug: Resource income from buildings is now displayed correctly.
+ - The right mouse button can now also be used to select a field without placing anything directly on it.
+ - Minor optimizations to the code
+ - Fixed "Using QCharRef with an index pointing outside the valid range of a QString." warning caused by Get_Levelcodes
+
+BETA 0:
+- First, reasonably complete Qt version of the editor for testing and playing around.
