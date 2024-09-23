@@ -1,71 +1,17 @@
 /*
- * HL Editor - 1st Release Candidate (Beta 1.7)
- * by Jan Knipperts (Dragonsphere /DOSReloaded)
- *
- * A map editor for the game History Line 1914-1918 by BlueByte
- *
- * Version info:
-*  Beta version! Errors and bugs may still occur and the program has not yet been sufficiently tested on various systems.
+* HL Editor - v1.0
+* by Jan Knipperts (Dragonsphere /DOSReloaded)
 *
-*  Changes to BETA 1.6
-*  - Complete buildings can be places by selecting the entry and right clicking on the map.
-*  - fixed some dialog titles, removed help icons etc.
-*  - corrected handling of "end of campaign" marker
-*  - The name of the selected unit is now also displayed in the window for setting the buildable units
-*  - existing maps can be removed from the game
-*  - Warning if single parts of factories or depots are placed
+* A map editor for the game History Line 1914-1918 by BlueByte
 *
-*  Changes to BETA 1.5
-*  - Fixed a bug in the display of german "ü"-Umlaut in the unit name.
-*  - Fixed German units alignement in the selection window
-*  - Now the terrain under a unit can also be changed without deleting it. Units can now be deleted by double-clicking on them.
-*  - Resources and units in the building are now retained when a building is replaced by another building.
-*  - Fixed a bug in the assignment of building data when buildings were replaced by others.
-*  - Maps can now also be loaded via their level code
-*  - The season and map type for in-game maps is read from the Codes.dat file.
-*    For cards that have not yet been added to the game, a temp file is created to save the season and card type.
-*  - It is now possible to create singelplayer maps with computer opponents.
-*  - Fixed setting of the "End of campaign"-marker when adding new maps to the game.
-*
-*  Changes to BETA 1.4
-*  - Map info / Statistics added
-*  - Fixed a bug that confused the assignment of fields to buildings when changing the map size
-*  - A warning is issued when adding to the game and when calling up the statistics if more terrain graphics have been used than the game can process.
-*  - A warning is issued if units are placed on fields that are unsuitable for them.
-*  - These warnings can also be switched off under Settings.
-*
-*  Changes to BETA 1.3
-*  - Fixed a bug in TPWM_unpack that caused writing attempts outside the buffer in some cases.
-*  - When creating a new map, you will now be asked whether it should be created as an ocean or a land map.
-*  - Optimized accuracy when selecting or placing fields or units with the mouse
-*  - For Linux compatibility, a separate check is now also carried out for lower-case file names when loading the game files.
-*
-*  Changes to BETA 1.2:
-*  - Units in buildings can now be removed with the right mouse button
-*  - Fields for units in buildings are now rectangular to make them clearer
-*  - Fixed a bug that prevented changing the map size in some cases
-*  - Improved handling of the cancel button for QFileDialogs
-*  - If the scaling factor is changed, the child windows are now also redrawn accordingly
-*  - Reference to beta version and greetings added
-*
-*  Changes to BETA 1.1:
-*  - Name of selected unit is shown in the unit selection window
-*  - Fixed bug in handling of not saved transport units in the original game files
-*  - New level codes are being checked
-*  - Query whether unsaved changes should be saved when exiting or reloading
-*  - some small improvements in the code
-*  - New messages. For example, an attempt is made to save and no map has been loaded or created beforehand
-*
-*  Changes to BETA 1.0:
-*  - Fixed bug: When importing a map into the game, SHP data was not saved correctly.
-*  - Fixed bug: Resource income from buildings is now displayed correctly.
-*  - The right mouse button can now also be used to select a field without placing anything directly on it.
-*  - Minor optimizations to the code
-*  - Fixed "Using QCharRef with an index pointing outside the valid range of a QString." warning caused by Get_Levelcodes
 *
 *  Known issues:
 *  - File access in the main program runs via Qt / QFile routines, but in some header files still via the standard C routines or fopen_s.
+*    This is due to the project history (This project started with some small tools to modify the game files of HL1914-1918 (mostly under DOS),
+*    then with the first attempt of a GUI editor for maps under DOS and WIN 32 API and then as the current project in Qt) and I was simply too lazy to adjust all the file accesses :)
 *
+*  - Capacity / weight is not yet taken into account when placing units in transport vehicles.
+*    You can put a battleship in a truck if you want to. Of course, this is a bit impractical in the game....
 *
 */
 
@@ -91,7 +37,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "RC 1";
+QString                  Version = "v1.0";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -115,9 +61,14 @@ QImage                   MapImageScaled;                    //Additional buffer 
 QScrollArea              *scrollArea;
 
 
-QImage                   TileListImage;                     //Screenbuffer for the tile selection child window
-QImage                   TileListImageScaled;               //Additional buffer for the scaled map image
-QScrollArea              *tilescrollArea;                   //ScrollArea of the chils window
+QImage                   BasicTileListImage;                //Screenbuffers for the basic tile selection window
+QImage                   ExtTileListImage;
+QImage                   BasicTileListImageScaled;          //Additional buffers for the scaled images
+QImage                   ExtTileListImageScaled;
+
+QScrollArea              *BasicTilescrollArea;              //ScrollArea for basic tiles
+QScrollArea              *ExtTilescrollArea;              //ScrollAreas for extanded tiles
+
 QWidget                  *tile_selection;                   //and a widget for it
 
 QImage                   UnitListImage;                     //Same for the Unit selection window
@@ -148,7 +99,7 @@ QRect                    screenrect;                        //A QRect to save th
 QLabel                   *unit_name_text;                   //Text label to display unit name on mouse over
 QLabel                   *buildable_unitname;
 
-int                      Scale_factor = 2;                  //Default scaling factor for the old VGA bitmaps
+double                   Scale_factor = 2.0;                //Default scaling factor for the old VGA bitmaps is 2x
 unsigned char            selected_tile = 0x00;              //Define "Plains" as default tile
 unsigned char            selected_unit = 0xFF;              //No unit is selected by default
 int                      selected_building = -1;            //No building is selected by default
@@ -158,10 +109,21 @@ bool                     no_tilechange = false;
 bool                     changes = false;
 bool                     already_saved = false;
 bool                     replace_accepted = false;
-bool                     grid_enabled = true;
+bool                     grid_enabled = false;
 bool                     show_warnings = true;
 bool                     Player2 = true;
+bool                     Ocean = false;
 
+//SHA-1 Checksums of different .COM file types in HL 1914-1918 (packed and unpacked)
+
+auto TypeI_checksum = QByteArray::fromHex("7101b53f49a9c4784625944cc210edd2798f26fa");
+auto TypeI_checksum_up = QByteArray::fromHex("b02d7202be4c1a0b0f6b56200c231a72aea1b4e0");
+auto TypeII_checksum = QByteArray::fromHex("e0d664b4e2a1074f3fecb0f0e6e5f3e49631accc");
+auto TypeII_checksum_up = QByteArray::fromHex("2104f458621bd2e3480d5ee05ae9e6ce30f112f7");
+auto TypeIII_checksum = QByteArray::fromHex("76fd238fe293c61bed9c5e1ad7e741d15d93e706");
+auto TypeIII_checksum_up = QByteArray::fromHex("ed34dbb1fc78e2c2de7036451508f26c51954e8b");
+auto TypeIV_checksum = QByteArray::fromHex("a58db2cea96ad91674458f78d820208ef42fdbd1");
+auto TypeIV_checksum_up = QByteArray::fromHex("923faf349491634b722a43c00160a10cf8418add");
 
 //now include the code to load game ressources etc.
 
@@ -210,16 +172,9 @@ MainWindow::MainWindow()
 
     //initialize images and the scroll area
     MapImage = QImage(); //Create a new QImage object for the map image
-    MapImageScaled = QImage(); //100,100,QImage::Format_RGB16); //Create a scaled version of it
-
-    QLabel *BetaWarning = new QLabel();
-    BetaWarning->setText("<br> <br> <br><font color='white'>This is a Beta Version! Warning of bugs and drastic changes between versions. </font> <br> <br>"
-                         "<font color='black'>Greetings to the dosreloaded community and thanks to everyone who supports this project. <br>"
-                         "My special thanks go to llm for his help in reverse engineering the game files and to tbc21 for beta testing.</font>");
-
+    MapImageScaled = QImage(); //100,100,QImage::Format_RGB16); //Create a scaled version of it  
     scrollArea = new(QScrollArea);
     scrollArea->setBackgroundRole(QPalette::Dark);
-    scrollArea->setWidget(BetaWarning);
     scrollArea->setVisible(true);
 
     setCentralWidget(scrollArea);
@@ -250,6 +205,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::mouseDoubleClickEvent( QMouseEvent *event )
 {
     //Double Click to delete unit on current field
+
     if (event->button() == Qt::LeftButton)
     {
 
@@ -297,10 +253,13 @@ void MainWindow::mouseDoubleClickEvent( QMouseEvent *event )
                     (Map.data[(field_pos*2)+1] == 0x35) ||
                     (Map.data[(field_pos*2)+1] == 0x3E) ||
                     (Map.data[(field_pos*2)+1] == 0x3F))
-                    Correct_building_record_from_map(); //fix building data record
+                {
+                     Map.data[(field_pos*2)+1] = 0xFF;
+                     Update_building_record_from_map(); //Update building data record
+                }
+                else
+                     Map.data[(field_pos*2)+1] = 0xFF;
 
-
-                Map.data[(field_pos*2)+1] = 0xFF;
                 Redraw_Field(hx,hy,selected_tile,0xFF);
                 MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
                 if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
@@ -456,7 +415,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                      (selected_unit  == 0x35) ||
                      (selected_unit  == 0x3E) ||
                      (selected_unit  == 0x3F)))
-                    Correct_building_record_from_map(); //...Correct the building data record in memory
+                    Update_building_record_from_map(); //...Correct the building data record in memory
 
                 Redraw_Field(hx,hy,Map.data[(field_pos*2)],Map.data[(field_pos*2)+1]);
                 MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
@@ -526,16 +485,13 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                  (Map.data[(field_pos*2)+1] == 0x3F))) //Transport
             {
 
+                selected_building = Get_Building_by_field(field_pos);
 
                 if (building_window == NULL)
-                {
-                  selected_building = Get_Buildings_info(field_pos);
-                  Create_building_configuration_window();
-                }
+                  Create_building_configuration_window();               
                 else
                 {
-                  building_window->close();
-                  selected_building = Get_Buildings_info(field_pos);
+                  building_window->close();                  
                   Create_building_configuration_window();
                 }
             }
@@ -592,7 +548,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
                         Change_Mapdata(hx+1,hy+(hx%2),0x18,0xFF);
                     }
 
-                    Correct_building_record_from_map(); //...Correct the building data record in memory
+                    Update_building_record_from_map(); //...Correct the building data record in memory
                 }
             }
 
@@ -679,10 +635,12 @@ void MainWindow::newFile_diag()
         if (reply == QMessageBox::Yes)
         {
             tile = 0x30;
+            Ocean = true;
         }
         else
         {
             tile = 0x00;
+            Ocean = false;
         }
 
         int x,y,o;
@@ -745,6 +703,7 @@ void MainWindow::newFile_diag()
         Building_info = (Building_data_ext*) malloc(sizeof(Building_data_ext));
         memset(SHP.can_be_built,0,sizeof(SHP.can_be_built));
         SHP.buildings = 0;
+        Num_building_entries = 0;
 
         changes = true;
         already_saved = false;
@@ -815,29 +774,20 @@ void MainWindow::Open_Map()
                     Create_Tileselection_window();
                 else
                 {
-                    TileListImage.fill(Qt::transparent);
-                    int tx = 0;
-                    int ty = 0;
+                    BasicTileListImageScaled = BasicTileListImage.scaled(BasicTileListImage.width()*Scale_factor,BasicTileListImage.height()*Scale_factor); //Restore original image for basic tiles
+                    ExtTileListImageScaled = ExtTileListImage.scaled(ExtTileListImage.width()*Scale_factor,ExtTileListImage.height()*Scale_factor); //Restore original image for extanded tiles
+                    Draw_Hexagon(0,0,QPen(Qt::red, 1),&BasicTileListImageScaled,false,true);
 
-                    for (int tc = 0; tc < Num_Parts; tc++)
-                    {
-                        Draw_Part(tx*Tilesize,ty*Tilesize,tc,&TileListImage); //Draw the bitmap
-                        tx++;
-                        if (tx == 10)
-                        {
-                            tx = 0;
-                            ty++;
-                        }
-                    }
+                    QLabel *label_b = new QLabel();                                     //Create labels
+                    label_b->setPixmap(QPixmap::fromImage(BasicTileListImageScaled));
+                    QLabel *label_e = new QLabel();
+                    label_e->setPixmap(QPixmap::fromImage(ExtTileListImageScaled));
 
-                    TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Create a scaled version of it
-                    Draw_Hexagon(0,0,QPen(Qt::red, 1),&TileListImageScaled,false,true);
-                    selected_tile = 0;
-                    QLabel *label = new QLabel();
-                    QHBoxLayout *layout = new QHBoxLayout();
-                    label->setPixmap(QPixmap::fromImage(TileListImageScaled));
-                    tilescrollArea->setWidget(label);
-                    layout->addWidget(tilescrollArea);
+                    selected_tile = 0;   //no tile selected
+                    no_tilechange = false;
+
+                    BasicTilescrollArea->setWidget(label_b);
+                    ExtTilescrollArea->setWidget(label_e);
                     tile_selection->update();
                 }
             }
@@ -905,9 +855,12 @@ void MainWindow::open_by_code_diag()
 
     bool ok;
 
+    Qt::WindowFlags flags = windowFlags();
+    Qt::WindowFlags helpFlag =   Qt::WindowContextHelpButtonHint| Qt::WindowMinMaxButtonsHint;
+    flags = flags & (~helpFlag);
 
     QString levelcode = QInputDialog::getItem(this, tr("Open map by levelcode:"),
-                                              "Please select a map:", Levelcode.Codelist, 0, false, &ok,Qt::Tool);
+                                              "Please select a map:", Levelcode.Codelist, 0, false, &ok,flags);
 
     if (ok && !levelcode.isEmpty())
     {
@@ -1097,12 +1050,29 @@ void MainWindow::statistics_diag()
         }
     }
 
+    QString maptype;
+
+    if (Player2 == false)
+    {
+        QString com = Map_file;
+        com.replace(".fin",".com").replace(".FIN",".COM");
+        QByteArray Checksum = fileChecksum(com, QCryptographicHash::Sha1);
+
+        if ((Checksum == TypeI_checksum) ||(Checksum == TypeI_checksum_up)) com = "Type I";
+        if ((Checksum == TypeII_checksum) ||(Checksum == TypeII_checksum_up)) com = "Type II";
+        if ((Checksum == TypeIII_checksum) ||(Checksum == TypeIII_checksum_up)) com = "Type III";
+        if ((Checksum == TypeIV_checksum) ||(Checksum == TypeIV_checksum_up)) com = "Type IV";
+        maptype = "Single Player "+com+"\n";
+    }
+    else
+        maptype = "Two-player \n";
 
 
     QString numbersstr =
-        "Map size: "+QString::number(Map.width)+"x"+QString::number(Map.height)+"\n"+
+        "Map type: "+maptype+
+        "Map size: "+QString::number(Map.width)+"x"+QString::number(Map.height)+"\n"+        
         "Different terrain tiles used: "+QString::number(parts)+"\n"+
-        "Extended terrain tiles used: "+QString::number(upper_parts)+"\n"+
+        " thereof extended terrain tiles: "+QString::number(upper_parts)+"\n"+
         "Different units used: "+QString::number(units)+"\n\n"+
 
                          "Germany: \n"
@@ -1131,7 +1101,7 @@ void MainWindow::statistics_diag()
 
 
     QMessageBox              Info;
-    Info.information(this,"Information about your map:",numbersstr);
+    Info.information(this,"Some informations about your map:",numbersstr);
     Info.setFixedSize(500,200);
 
 
@@ -1216,9 +1186,13 @@ void MainWindow::setPath_diag()
 
 void MainWindow::setScale_diag()
 {
+     QDir           dir;
 
     bool ok;
-    Scale_factor = QInputDialog::getInt(
+    Qt::WindowFlags flags = windowFlags();
+    Qt::WindowFlags helpFlag =   Qt::WindowContextHelpButtonHint| Qt::WindowMinMaxButtonsHint;
+    flags = flags & (~helpFlag);
+    Scale_factor = QInputDialog::getDouble(
         this,
         tr("Scaling of VGA bitmaps:"),
         tr("Enter a factor for scaling"),
@@ -1227,40 +1201,70 @@ void MainWindow::setScale_diag()
         10,
         1,
         &ok,
-        Qt::Tool);
+        flags);
 
     if (ok)
     {
         if (Scale_factor < 1) Scale_factor = 1;
 
-        MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor);
-        if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
+        QFile cfgFile(dir.currentPath()+Cfg);
+        cfgFile.open(QIODevice::WriteOnly);
 
-        QLabel *imageLabel = new QLabel;
-        imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
-        scrollArea->setWidget(imageLabel);
-
-        //Scale and update the child window contents
-
-        if (showunitwindowAct->isChecked() == true)
+        if (!cfgFile.isOpen())
         {
-            UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor);
-            QLabel *imageLabel1 = new QLabel;
-            imageLabel1->setPixmap(QPixmap::fromImage(UnitListImageScaled));
-            unitscrollArea->setWidget(imageLabel1);
-            unit_selection->update();
+            QMessageBox              Errormsg;
+            Errormsg.warning(this,"","I cannot save the configuration file!");
+            Errormsg.setFixedSize(500,200);
+        }
+        else
+        {
+            QTextStream out(&cfgFile);
+            out << GameDir + "\n";
+            out << Scale_factor;
+            cfgFile.close();
+
+            MapDir = GameDir+MapDir;
         }
 
-        if (showtilewindowAct->isChecked() == true)
+        if (Map.loaded)
         {
-            TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor);
-            QLabel *imageLabel2 = new QLabel;
-            imageLabel2->setPixmap(QPixmap::fromImage(TileListImageScaled));
-            tilescrollArea->setWidget(imageLabel2);
-            tile_selection->update();
+            MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor);
+            if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
+
+            QLabel *imageLabel = new QLabel;
+            imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
+            scrollArea->setWidget(imageLabel);
+
+            //Scale and update the child window contents
+
+            if (showunitwindowAct->isChecked() == true)
+            {
+                UnitListImageScaled = UnitListImage.scaled(UnitListImage.width()*Scale_factor,UnitListImage.height()*Scale_factor);
+                QLabel *imageLabel1 = new QLabel;
+                imageLabel1->setPixmap(QPixmap::fromImage(UnitListImageScaled));
+                unitscrollArea->setWidget(imageLabel1);
+                unit_selection->update();
+            }
+
+            if (showtilewindowAct->isChecked() == true)
+            {
+                BasicTileListImageScaled = BasicTileListImage.scaled(BasicTileListImage.width()*Scale_factor,BasicTileListImage.height()*Scale_factor); //Restore original image for basic tiles
+                ExtTileListImageScaled = ExtTileListImage.scaled(ExtTileListImage.width()*Scale_factor,ExtTileListImage.height()*Scale_factor); //Restore original image for extanded tiles
+                Draw_Hexagon(0,0,QPen(Qt::red, 1),&BasicTileListImageScaled,false,true);
+
+                QLabel *label_b = new QLabel();                                     //Create labels
+                label_b->setPixmap(QPixmap::fromImage(BasicTileListImageScaled));
+                QLabel *label_e = new QLabel();
+                label_e->setPixmap(QPixmap::fromImage(ExtTileListImageScaled));
+
+                selected_tile = 0;   //no tile selected
+                no_tilechange = false;
+
+                BasicTilescrollArea->setWidget(label_b);
+                ExtTilescrollArea->setWidget(label_e);
+                tile_selection->update();
+            }
         }
-
-
     }
 
 }
@@ -1276,9 +1280,12 @@ void MainWindow::add_diag()
         Check_used_tiles();
 
         bool ok;
+        Qt::WindowFlags flags = windowFlags();
+        Qt::WindowFlags helpFlag =   Qt::WindowContextHelpButtonHint| Qt::WindowMinMaxButtonsHint;
+        flags = flags & (~helpFlag);
         QString levelcode = QInputDialog::getText(this, tr("Add map to game"),
                                                   tr("Enter a levelcode for your map (5 letters):"), QLineEdit::Normal,
-                                                  "", &ok,Qt::Tool);
+                                                  "", &ok,flags);
         if (ok && !levelcode.isEmpty())
         {
             if (!Check_levelcode(levelcode))
@@ -1365,38 +1372,96 @@ void MainWindow::add_diag()
             if (Player2 == false)
             {
                 bool            ok;
-
                 QStringList     items;
+                QByteArray      Checksum;
 
                 items << "Type I"
                       << "Type II"
-                    << "Type III"
-                    << "Type IV";
+                      << "Type III"
+                      << "Type IV";
+
+                Qt::WindowFlags flags = windowFlags();
+                Qt::WindowFlags helpFlag =   Qt::WindowContextHelpButtonHint| Qt::WindowMinMaxButtonsHint;
+                flags = flags & (~helpFlag);
 
                 QString item = QInputDialog::getItem(this, tr("Type of computer opponent"),
-                                                 tr("You have configured your map as a single player map. Please select the type of computer opponent (.COM file) for your map:"), items, 0, false, &ok,Qt::Tool);
+                                                 tr("You have configured your map as a single player map. Please select the type of computer opponent (.COM file) for your map:"), items, 0, false, &ok,flags);
                 if (ok && !item.isEmpty())
                 {
+                  QStringList coms = Map_dir.entryList(QStringList() << "*.com" << "*.COM",QDir::Files);
 
-                    if (item == "Type I"){Comfile = "00.COM";}
-                    if (item == "Type II"){Comfile = "21.COM";}
-                    if (item == "Type III"){Comfile = "45.COM";}
-                    if (item == "Type IV"){Comfile = "22.COM";}
-
-                    Comfile = MapDir+"/"+Comfile;
-                    Comfile.replace("/'", "\\'");
-
-                    if (!QFile::exists(Comfile))
-                    {
-                        Comfile = Comfile.toLower();
-                        if (!QFile::exists(Comfile))
+                  if (item == "Type I")
+                  {
+                        Comfile = "";
+                        for(int i = coms.size()-1; i >= 0; i--)
+                        {
+                            Checksum = fileChecksum(MapDir+"/"+coms[i], QCryptographicHash::Sha1);
+                            if ((Checksum == TypeI_checksum) || (Checksum == TypeI_checksum_up))
+                             {
+                                Comfile = MapDir+"/"+coms[i];
+                            }
+                        }
+                        if (Comfile == "")
                         {
                             QMessageBox   Errormsg;
-                            Errormsg.critical(this,"","File "+Comfile+" not found!");
+                            Errormsg.critical(this,"Error:","I could not find a type I .COM file in the maps folder that I could use for the new map.");
                             Errormsg.setFixedSize(500,200);
-                            return;
                         }
-                    }
+                  }
+                  if (item == "Type II")
+                  {
+                        Comfile = "";
+                        for(int i = coms.size()-1; i >= 0; i--)
+                        {
+                            Checksum = fileChecksum(MapDir+"/"+coms[i], QCryptographicHash::Sha1);
+                            if ((Checksum == TypeII_checksum) || (Checksum == TypeII_checksum_up))
+                            {
+                                Comfile = MapDir+"/"+coms[i];
+                            }
+                        }
+                        if (Comfile == "")
+                        {
+                            QMessageBox   Errormsg;
+                            Errormsg.critical(this,"Error:","I could not find a type II .COM file in the maps folder that I could use for the new map.");
+                            Errormsg.setFixedSize(500,200);
+                        }
+                  }
+                  if (item == "Type III")
+                  {
+                        Comfile = "";
+                        for(int i = coms.size()-1; i >= 0; i--)
+                        {
+                            Checksum = fileChecksum(MapDir+"/"+coms[i], QCryptographicHash::Sha1);
+                            if ((Checksum == TypeIII_checksum) || (Checksum == TypeIII_checksum_up))
+                            {
+                                Comfile = MapDir+"/"+coms[i];
+                            }
+                        }
+                        if (Comfile == "")
+                        {
+                            QMessageBox   Errormsg;
+                            Errormsg.critical(this,"Error:","I could not find a type III .COM file in the maps folder that I could use for the new map.");
+                            Errormsg.setFixedSize(500,200);
+                        }
+                  }
+                  if (item == "Type IV")
+                  {
+                        Comfile = "";
+                        for(int i = coms.size()-1; i >= 0; i--)
+                        {
+                            Checksum = fileChecksum(MapDir+"/"+coms[i], QCryptographicHash::Sha1);
+                            if ((Checksum == TypeIV_checksum) || (Checksum == TypeIV_checksum_up))
+                            {
+                                Comfile = MapDir+"/"+coms[i];
+                            }
+                        }
+                        if (Comfile == "")
+                        {
+                            QMessageBox   Errormsg;
+                            Errormsg.critical(this,"Error:","I could not find a type IV .COM file in the maps folder that I could use for the new map.");
+                            Errormsg.setFixedSize(500,200);
+                        }
+                  }
 
                     Newfile = Map_file;
                     Newfile.replace(".fin",".com").replace(".FIN",".COM");
@@ -1446,9 +1511,12 @@ void MainWindow::remove_diag()
 
     bool ok;
 
+    Qt::WindowFlags flags = windowFlags();
+    Qt::WindowFlags helpFlag =   Qt::WindowContextHelpButtonHint| Qt::WindowMinMaxButtonsHint;
+    flags = flags & (~helpFlag);
 
     QString R_levelcode = QInputDialog::getItem(this, tr("Remove map from game"),
-                                              "Which map should be removed from the game?", Levelcode.Codelist, 0, false, &ok,Qt::Tool);
+                                              "Which map should be removed from the game?", Levelcode.Codelist, 0, false, &ok,flags);
 
     if (ok && !R_levelcode.isEmpty())
     {
@@ -1605,157 +1673,159 @@ void MainWindow::map_resize_diag()
 
     if  (Map.loaded == true)
     {
-    int             current, width, height,x,y,o,o1;
-    unsigned char*  data;
-    bool            ok;
+        int             current, width, height,x,y,o,o1;
+        unsigned char*  data;
+        bool            ok;
 
-    QStringList     items;
+        QStringList     items;
 
-    items << "16x16"
-        << "16x24"
-        << "16x32"
-        << "16x40"
-        << "24x24"
-        << "24x32"
-        << "32x24"
-        << "32x32"
-        << "32x48"
-        << "40x32"
-        << "40x40"
-        << "48x64"
-        << "64x24"
-        << "64x32"
-        << "64x48";
-
-
-    if ((Map.width == 16) && (Map.height == 16)) current = 0;
-    if ((Map.width == 16) && (Map.height == 24)) current = 1;
-    if ((Map.width == 16) && (Map.height == 32)) current = 2;
-    if ((Map.width == 16) && (Map.height == 40)) current = 3;
-
-    if ((Map.width == 24) && (Map.height == 24)) current = 4;
-    if ((Map.width == 24) && (Map.height == 32)) current = 5;
-
-    if ((Map.width == 32) && (Map.height == 24)) current = 6;
-    if ((Map.width == 32) && (Map.height == 32)) current = 7;
-    if ((Map.width == 32) && (Map.height == 48)) current = 8;
-
-    if ((Map.width == 40) && (Map.height == 32)) current = 9;
-    if ((Map.width == 40) && (Map.height == 40)) current = 10;
-
-    if ((Map.width == 48) && (Map.height == 64)) current = 11;
-
-    if ((Map.width == 64) && (Map.height == 24)) current = 12;
-    if ((Map.width == 64) && (Map.height == 32)) current = 13;
-    if ((Map.width == 64) && (Map.height == 48)) current = 14;
+        items << "16x16"
+            << "16x24"
+            << "16x32"
+            << "16x40"
+            << "24x24"
+            << "24x32"
+            << "32x24"
+            << "32x32"
+            << "32x48"
+            << "40x32"
+            << "40x40"
+            << "48x64"
+            << "64x24"
+            << "64x32"
+            << "64x48";
 
 
-    QString item = QInputDialog::getItem(this, tr("Select map size"),
-                                         tr("Map width x height = "), items, current, false, &ok,Qt::Tool);
-    if (ok && !item.isEmpty())
-    {
+        if ((Map.width == 16) && (Map.height == 16)) current = 0;
+        if ((Map.width == 16) && (Map.height == 24)) current = 1;
+        if ((Map.width == 16) && (Map.height == 32)) current = 2;
+        if ((Map.width == 16) && (Map.height == 40)) current = 3;
 
-        if (item == "16x16"){ width = 16;height = 16;}
-        if (item == "16x24"){ width = 16;height = 24;}
-        if (item == "16x32"){ width = 16;height = 32;}
-        if (item == "16x40"){ width = 16;height = 40;}
-        if (item == "24x24"){ width = 24;height = 24;}
-        if (item == "24x32"){ width = 24;height = 32;}
-        if (item == "32x24"){ width = 32;height = 24;}
-        if (item == "32x32"){ width = 32;height = 32;}
-        if (item == "32x48"){ width = 32;height = 48;}
-        if (item == "40x32"){ width = 40;height = 32;}
-        if (item == "40x40"){ width = 40;height = 40;}
-        if (item == "48x64"){ width = 48;height = 64;}
-        if (item == "64x24"){ width = 64;height = 24;}
-        if (item == "64x32"){ width = 64;height = 32;}
-        if (item == "64x48"){ width = 64;height = 48;}
+        if ((Map.width == 24) && (Map.height == 24)) current = 4;
+        if ((Map.width == 24) && (Map.height == 32)) current = 5;
 
+        if ((Map.width == 32) && (Map.height == 24)) current = 6;
+        if ((Map.width == 32) && (Map.height == 32)) current = 7;
+        if ((Map.width == 32) && (Map.height == 48)) current = 8;
 
-        if ((data = (unsigned char*)malloc(((width+1) * (height+1) * 2))) == NULL)
+        if ((Map.width == 40) && (Map.height == 32)) current = 9;
+        if ((Map.width == 40) && (Map.height == 40)) current = 10;
+
+        if ((Map.width == 48) && (Map.height == 64)) current = 11;
+
+        if ((Map.width == 64) && (Map.height == 24)) current = 12;
+        if ((Map.width == 64) && (Map.height == 32)) current = 13;
+        if ((Map.width == 64) && (Map.height == 48)) current = 14;
+
+        Qt::WindowFlags flags = windowFlags();
+        Qt::WindowFlags helpFlag =   Qt::WindowContextHelpButtonHint| Qt::WindowMinMaxButtonsHint;
+        flags = flags & (~helpFlag);
+
+        QString item = QInputDialog::getItem(this, tr("Select map size"),
+                                         tr("Map width x height = "), items, current, false, &ok,flags);
+        if (ok && !item.isEmpty())
         {
-            QMessageBox  Errormsg;
-            Errormsg.critical(this,"Error","Memory allocation error!");
-            Errormsg.setFixedSize(500,200);
-            return;
-        }
-        else
-        {
-            o = 0;
-            o1 = 0;
-            for (y = 1; y <= height; y++)
+            if (item == "16x16"){ width = 16;height = 16;}
+            if (item == "16x24"){ width = 16;height = 24;}
+            if (item == "16x32"){ width = 16;height = 32;}
+            if (item == "16x40"){ width = 16;height = 40;}
+            if (item == "24x24"){ width = 24;height = 24;}
+            if (item == "24x32"){ width = 24;height = 32;}
+            if (item == "32x24"){ width = 32;height = 24;}
+            if (item == "32x32"){ width = 32;height = 32;}
+            if (item == "32x48"){ width = 32;height = 48;}
+            if (item == "40x32"){ width = 40;height = 32;}
+            if (item == "40x40"){ width = 40;height = 40;}
+            if (item == "48x64"){ width = 48;height = 64;}
+            if (item == "64x24"){ width = 64;height = 24;}
+            if (item == "64x32"){ width = 64;height = 32;}
+            if (item == "64x48"){ width = 64;height = 48;}
+
+            if ((data = (unsigned char*)malloc(((width+1) * (height+1) * 2))) == NULL)
             {
-              o1 = ((y-1)*Map.width)*2;
-                for (x = 1; x <= width; x++)
+                QMessageBox  Errormsg;
+                Errormsg.critical(this,"Error","Memory allocation error!");
+                Errormsg.setFixedSize(500,200);
+                return;
+            }
+            else
+            {
+                o = 0;
+                o1 = 0;
+                for (y = 1; y <= height; y++)
                 {
-                    if ((x == width) || (y == height))
+                    o1 = ((y-1)*Map.width)*2;
+                    for (x = 1; x <= width; x++)
                     {
-                        data[o] =  (unsigned char) 0xAE;
-                        data[o+1] =  (unsigned char) 0xFF;
-                    }
-                    else
-                    {
-                        if  ((x >= Map.width) || (y >= Map.height))
+                        if ((x == width) || (y == height))
                         {
-                            data[o] =  (unsigned char) 0x00;
+                            data[o] =  (unsigned char) 0xAE;
                             data[o+1] =  (unsigned char) 0xFF;
                         }
                         else
                         {
-                            data[o] = (unsigned char) Map.data[o1];
-                            data[o+1] = (unsigned char) Map.data[o1+1];
-                            o1 = o1 + 2;
+                            if  ((x >= Map.width) || (y >= Map.height))
+                            {
+                                if (!Ocean)
+                                    data[o] =  (unsigned char) 0x00;
+                                else
+                                    data[o] =  (unsigned char) 0x30;
+
+                                data[o+1] =  (unsigned char) 0xFF;
+                            }
+                            else
+                            {
+                                data[o] = (unsigned char) Map.data[o1];
+                                data[o+1] = (unsigned char) Map.data[o1+1];
+                                o1 = o1 + 2;
+                            }
                         }
+                        o = o + 2;
                     }
-                    o = o + 2;
                 }
-
             }
-       }
 
-        if  (Map.data != NULL) free(Map.data); //Release old data
-        Map.width = width; //Set new width, height and size
-        Map.height = height;
-        Map.data_size = ((Map.width+1) * (Map.height+1)) * 2;
-        Map.data = data; //Let Map.data point to new buffer
+            if  (Map.data != NULL) free(Map.data); //Release old data
+            Map.width = width; //Set new width, height and size
+            Map.height = height;
+            Map.data_size = ((Map.width+1) * (Map.height+1)) * 2;
+            Map.data = data; //Let Map.data point to new buffer
 
-        Add_building_positions(); //Correct building positions
+            Add_building_positions(); //Correct building positions
 
-        MapImage = QImage(((Map.width/2)*Tilesize)+(((Map.width/2)-1)*Tileshift),((Map.height-1)*Tilesize)+(Tilesize/2), QImage::Format_RGB16); //Create a new QImage object for the map image
-        MapImage.fill(Qt::transparent);
-        Draw_Map(); //and draw the map to it
-        MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
-        Map.loaded = true;
-        if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
+            MapImage = QImage(((Map.width/2)*Tilesize)+(((Map.width/2)-1)*Tileshift),((Map.height-1)*Tilesize)+(Tilesize/2), QImage::Format_RGB16); //Create a new QImage object for the map image
+            MapImage.fill(Qt::transparent);
+            Draw_Map(); //and draw the map to it
+            MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
+            Map.loaded = true;
+            if(showgridAct->isChecked()) ShowGrid();  //redraw the grid if enabled
 
-        QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
-        imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
-        scrollArea->setWidget(imageLabel);
+            QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
+            imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
+            scrollArea->setWidget(imageLabel);
 
+            if (showtilewindowAct->isChecked() == true)
+            {
+                if (tile_selection == NULL)
+                    Create_Tileselection_window();
+                else
+                    tile_selection->show();
+            }
 
-        if (showtilewindowAct->isChecked() == true)
-        {
-            if (tile_selection == NULL)
-                Create_Tileselection_window();
-            else
-                tile_selection->show();
+            if (showunitwindowAct->isChecked() == true)
+            {
+                if (unit_selection == NULL)
+                    Create_Unitselection_window();
+                else
+                    unit_selection->show();
+            }
         }
-
-        if (showunitwindowAct->isChecked() == true)
-        {
-            if (unit_selection == NULL)
-                Create_Unitselection_window();
-            else
-                unit_selection->show();
-        }
-    }
-
     }
     else
     {
-    QMessageBox Errormsg;
-    Errormsg.warning(this,"","Please load or create a map first.");
-    Errormsg.setFixedSize(500,200);
+        QMessageBox Errormsg;
+        Errormsg.warning(this,"","Please load or create a map first.");
+        Errormsg.setFixedSize(500,200);
     }
 }
 
@@ -1803,31 +1873,22 @@ void MainWindow::season_diag()
         scrollArea->setWidget(imageLabel);
 
         if (showtilewindowAct->isChecked() == true)  //Update Tile selection
-        {
-        TileListImage.fill(Qt::transparent);
-        int tx = 0;
-        int ty = 0;
+        {            
+            BasicTileListImageScaled = BasicTileListImage.scaled(BasicTileListImage.width()*Scale_factor,BasicTileListImage.height()*Scale_factor); //Restore original image for basic tiles
+            ExtTileListImageScaled = ExtTileListImage.scaled(ExtTileListImage.width()*Scale_factor,ExtTileListImage.height()*Scale_factor); //Restore original image for extanded tiles
+            Draw_Hexagon(0,0,QPen(Qt::red, 1),&BasicTileListImageScaled,false,true);
 
-        for (int tc = 0; tc < Num_Parts; tc++)
-        {
-            Draw_Part(tx*Tilesize,ty*Tilesize,tc,&TileListImage); //Draw the bitmap
-            tx++;
-            if (tx == 10)
-            {
-                tx = 0;
-                ty++;
-            }
-        }
+            QLabel *label_b = new QLabel();                                     //Create labels
+            label_b->setPixmap(QPixmap::fromImage(BasicTileListImageScaled));
+            QLabel *label_e = new QLabel();
+            label_e->setPixmap(QPixmap::fromImage(ExtTileListImageScaled));
 
-        TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Create a scaled version of it
-        Draw_Hexagon(0,0,QPen(Qt::red, 1),&TileListImageScaled,false,true);
-        selected_tile = 0;
-        QLabel *label = new QLabel();
-        QHBoxLayout *layout = new QHBoxLayout();
-        label->setPixmap(QPixmap::fromImage(TileListImageScaled));
-        tilescrollArea->setWidget(label);
-        layout->addWidget(tilescrollArea);
-        tile_selection->update();
+            selected_tile = 0;   //no tile selected
+            no_tilechange = false;
+
+            BasicTilescrollArea->setWidget(label_b);
+            ExtTilescrollArea->setWidget(label_e);
+            tile_selection->update();
         }
     }
 
@@ -2029,45 +2090,101 @@ void tilelistwindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        int pos_x = tilescrollArea->horizontalScrollBar()->value();
-        int pos_y = tilescrollArea->verticalScrollBar()->value();
-        TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Restore original image
-        QRect widgetRect = tilescrollArea->geometry();
-        int fx = (event->pos().x()-widgetRect.left()+pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
-        int fy = (event->pos().y()-widgetRect.top()+pos_y) / (Tilesize*Scale_factor);
+        QRect b_widgetRect = BasicTilescrollArea->geometry();
+        QRect e_widgetRect = ExtTilescrollArea->geometry();
 
-        if (((fy*10)+fx) <= Num_Parts-1)
+        if (b_widgetRect.contains(event->pos()))
         {
-            selected_tile = (fy*10)+fx;
-            Draw_Hexagon(fx,fy,QPen(Qt::red, 1),&TileListImageScaled,false,true); //Draw the frame
+            int e_pos_x = ExtTilescrollArea->horizontalScrollBar()->value();
+            int e_pos_y = ExtTilescrollArea->verticalScrollBar()->value();
+            ExtTileListImageScaled = ExtTileListImage.scaled(ExtTileListImage.width()*Scale_factor,ExtTileListImage.height()*Scale_factor); //Restore original image
+            QLabel *label_e = new QLabel();
+            label_e->setPixmap(QPixmap::fromImage(ExtTileListImageScaled));
+            ExtTilescrollArea->setWidget(label_e);
+            ExtTilescrollArea->horizontalScrollBar()->setValue(e_pos_x); //Reset the scrollArea to last position
+            ExtTilescrollArea->verticalScrollBar()->setValue(e_pos_y);
+
+            int b_pos_x = BasicTilescrollArea->horizontalScrollBar()->value();
+            int b_pos_y = BasicTilescrollArea->verticalScrollBar()->value();
+
+            int b_fx = (event->pos().x()-b_widgetRect.left()+b_pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+            int b_fy = (event->pos().y()-b_widgetRect.top()+b_pos_y) / (Tilesize*Scale_factor);
+
+            if (((b_fy*10)+b_fx) < 25)
+            {
+                selected_tile = ((b_fy*10)+b_fx);
+                BasicTileListImageScaled = BasicTileListImage.scaled(BasicTileListImage.width()*Scale_factor,BasicTileListImage.height()*Scale_factor); //Restore original image
+                Draw_Hexagon(b_fx,b_fy,QPen(Qt::red, 1),&BasicTileListImageScaled,false,true); //Draw the frame
+                no_tilechange = false;
+                QLabel *label_b = new QLabel();
+                label_b->setPixmap(QPixmap::fromImage(BasicTileListImageScaled));
+                BasicTilescrollArea->setWidget(label_b);
+                BasicTilescrollArea->horizontalScrollBar()->setValue(b_pos_x); //Reset the scrollArea to last position
+                BasicTilescrollArea->verticalScrollBar()->setValue(b_pos_y);
+            }
+        }
+        else
+        {
+            if (e_widgetRect.contains(event->pos()))
+            {
+                int b_pos_x = BasicTilescrollArea->horizontalScrollBar()->value();
+                int b_pos_y = BasicTilescrollArea->verticalScrollBar()->value();
+                BasicTileListImageScaled = BasicTileListImage.scaled(BasicTileListImage.width()*Scale_factor,BasicTileListImage.height()*Scale_factor); //Restore original image
+                QLabel *label_b = new QLabel();
+                label_b->setPixmap(QPixmap::fromImage(BasicTileListImageScaled));
+                BasicTilescrollArea->setWidget(label_b);
+                BasicTilescrollArea->horizontalScrollBar()->setValue(b_pos_x); //Reset the scrollArea to last position
+                BasicTilescrollArea->verticalScrollBar()->setValue(b_pos_y);
+
+                int e_pos_x = ExtTilescrollArea->horizontalScrollBar()->value();
+                int e_pos_y = ExtTilescrollArea->verticalScrollBar()->value();
+                ExtTileListImageScaled = ExtTileListImage.scaled(ExtTileListImage.width()*Scale_factor,ExtTileListImage.height()*Scale_factor); //Restore original image
+
+                int e_fx = (event->pos().x()-e_widgetRect.left()+e_pos_x) / (Tilesize*Scale_factor); // Calc field position from mouse cords
+                int e_fy = (event->pos().y()-e_widgetRect.top()+e_pos_y) / (Tilesize*Scale_factor);
+
+                if (((e_fy*10)+e_fx) < Num_Parts-1)
+                {
+                    selected_tile = ((e_fy*10)+e_fx)+25;
+                    Draw_Hexagon(e_fx,e_fy,QPen(Qt::red, 1),&ExtTileListImageScaled,false,true); //Draw the frame
+                    no_tilechange = false;
+                    QLabel *label_e = new QLabel();
+                    label_e->setPixmap(QPixmap::fromImage(ExtTileListImageScaled));
+                    ExtTilescrollArea->setWidget(label_e);
+                    ExtTilescrollArea->horizontalScrollBar()->setValue(e_pos_x); //Reset the scrollArea to last position
+                    ExtTilescrollArea->verticalScrollBar()->setValue(e_pos_y);
+                }
+            }
         }
 
-        no_tilechange = false;
-
-        QLabel *label = new QLabel();
-        label->setPixmap(QPixmap::fromImage(TileListImageScaled));
-
-        tilescrollArea->setWidget(label);
         tile_selection->update();
-        tilescrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
-        tilescrollArea->verticalScrollBar()->setValue(pos_y);
     }
 
     if (event->button() == Qt::RightButton)
     {
-        int pos_x = tilescrollArea->horizontalScrollBar()->value();
-        int pos_y = tilescrollArea->verticalScrollBar()->value();
-        TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Restore original image
-         QLabel *label = new QLabel();
-        label->setPixmap(QPixmap::fromImage(TileListImageScaled));
+        int b_pos_x = BasicTilescrollArea->horizontalScrollBar()->value();
+        int b_pos_y = BasicTilescrollArea->verticalScrollBar()->value();
+        BasicTileListImageScaled = BasicTileListImage.scaled(BasicTileListImage.width()*Scale_factor,BasicTileListImage.height()*Scale_factor); //Restore original image for basic tiles
 
-        selected_tile = 0xFF;
+        int e_pos_x = ExtTilescrollArea->horizontalScrollBar()->value();
+        int e_pos_y = ExtTilescrollArea->verticalScrollBar()->value();
+        ExtTileListImageScaled = ExtTileListImage.scaled(ExtTileListImage.width()*Scale_factor,ExtTileListImage.height()*Scale_factor); //Restore original image for extanded tiles
+
+        QLabel *label_b = new QLabel();                                     //Crete labels
+        label_b->setPixmap(QPixmap::fromImage(BasicTileListImageScaled));
+        QLabel *label_e = new QLabel();
+        label_e->setPixmap(QPixmap::fromImage(ExtTileListImageScaled));
+
+        selected_tile = 0xFF;   //no tile selcted
         no_tilechange = true;
 
-        tilescrollArea->setWidget(label);
+        BasicTilescrollArea->setWidget(label_b);
+        ExtTilescrollArea->setWidget(label_e);
         tile_selection->update();
-        tilescrollArea->horizontalScrollBar()->setValue(pos_x); //Reset the scrollArea to last position
-        tilescrollArea->verticalScrollBar()->setValue(pos_y);
+        BasicTilescrollArea->horizontalScrollBar()->setValue(b_pos_x); //Reset the scrollArea for basic tiles to last position
+        BasicTilescrollArea->verticalScrollBar()->setValue(b_pos_y);
+        ExtTilescrollArea->horizontalScrollBar()->setValue(e_pos_x); //Reset the scrollArea for extanded tiles to last position
+        ExtTilescrollArea->verticalScrollBar()->setValue(e_pos_y);
 
     }
 }
@@ -2365,7 +2482,7 @@ void replacewindow::closeEvent(QCloseEvent *event)
         MapImage.fill(Qt::transparent);
         Draw_Map(); //redraw the mapimage
         MapImageScaled = MapImage.scaled(MapImage.width()*Scale_factor,MapImage.height()*Scale_factor); //Create a scaled version of it
-        if (grid_enabled) ShowGrid();  //redraw the grid if enabled
+        if (grid_enabled == true) ShowGrid();  //redraw the grid if enabled
         QLabel *imageLabel = new QLabel;     //Create a scroll area to display the map
         imageLabel->setPixmap(QPixmap::fromImage(MapImageScaled));
         scrollArea->setWidget(imageLabel);

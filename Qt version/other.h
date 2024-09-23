@@ -1,5 +1,5 @@
 /* OTHER.H
- * Additional functions for the Hisotry Line Mapeditor. Draw hexagons, release memory, create child windows, etc.
+ * Additional functions for the Hisotry Line Mapeditor. Draw hexagons, release memory, create child windows and dialogs, etc.
 */
 
 void Release_Buffers()
@@ -125,6 +125,7 @@ bool Read_Config()
 //Reading the configuration file
 {
     QDir           dir;
+    QString        scale_number;
 
     GameDir = "";
 
@@ -139,12 +140,13 @@ bool Read_Config()
     {
         QTextStream in(&cfgFile);
         in.readLineInto(&GameDir);
-        cfgFile.read(Scale_factor);
+        in.readLineInto(&scale_number);
         cfgFile.close();
 
         if (Check_for_game_files() == true)
             MapDir = GameDir+MapDir;
 
+        Scale_factor = scale_number.toInt();
         if (Scale_factor == 0) Scale_factor = 2;
     }
 
@@ -426,7 +428,7 @@ int Load_Map()
         Errormsg.setFixedSize(500,200);
         memset(SHP.can_be_built,0,sizeof(SHP.can_be_built));
         Building_info = NULL;
-        Create_building_record_from_map();
+        Create_valid_building_record_from_map();
     }
     else
         Add_building_positions();
@@ -551,7 +553,7 @@ void Redraw_Field(int x, int y,int part, int unit)
 
 void Change_Mapdata(int x, int y,unsigned char part, unsigned char unit)
 {
-    if ((x < (Map.width-1)) && (y < (Map.height-1)))  //Is the field on the map?
+    if ((x < (Map.width-1)) && (x >= 0) && (y < (Map.height-1)) && (y >= 0))  //Is the field on the map?
     {
         int offset;
         offset = ((y*Map.width)+x)*2;
@@ -594,18 +596,25 @@ void Create_Tileselection_window()
         tile_selection = new tilelistwindow();
         tile_selection->setWindowFlag(Qt::SubWindow);
         tile_selection->setWindowFlags(Qt::WindowStaysOnTopHint);
-        tile_selection->resize(((11*Tilesize)*Scale_factor)+10, ((11*Tilesize)*Scale_factor));
         tile_selection->setWindowTitle("Tile selection");
 
-        TileListImage = QImage((10*Tilesize),((Num_Parts/10)+1)*Tilesize, QImage::Format_RGB16); //Create a new QImage object for the tile list
-        TileListImage.fill(Qt::transparent);
+
+        QLabel *title1;
+        title1 = new QLabel();
+        title1->setText("Basic tiles:");
+
+
+
+        BasicTileListImage = QImage((10*Tilesize),3*Tilesize, QImage::Format_RGB16); //Create a new QImage object for the tile list
+        BasicTileListImage.fill(Qt::transparent);
 
         int tx = 0;
         int ty = 0;
 
-        for (int tc = 0; tc < Num_Parts; tc++)
+
+        for (int tc = 0; tc < 25; tc++)
         {
-            Draw_Part(tx*Tilesize,ty*Tilesize,tc,&TileListImage); //Draw the bitmap
+            Draw_Part(tx*Tilesize,ty*Tilesize,tc,&BasicTileListImage); //Draw the bitmap
             tx++;
             if (tx == 10)
             {
@@ -614,19 +623,64 @@ void Create_Tileselection_window()
             }
         }
 
-        TileListImageScaled = TileListImage.scaled(TileListImage.width()*Scale_factor,TileListImage.height()*Scale_factor); //Create a scaled version of it
-        Draw_Hexagon(0,0,QPen(Qt::red, 1),&TileListImageScaled,false,true);
-        selected_tile = 0;
-        QLabel *label = new QLabel();
-        QHBoxLayout *layout = new QHBoxLayout();
-        label->setPixmap(QPixmap::fromImage(TileListImageScaled));
 
-        tilescrollArea = new(QScrollArea);
-        tilescrollArea->setBackgroundRole(QPalette::Dark);
-        tilescrollArea->setWidget(label);
-        tilescrollArea->setVisible(true);
-        layout->addWidget(tilescrollArea);
+        QLabel *title2;
+        title2 = new QLabel();
+        title2->setText("Extended tiles (only about 80 different ones can be used):");
+
+
+        ExtTileListImage = QImage((10*Tilesize),((Num_Parts-25)/10)*Tilesize, QImage::Format_RGB16); //Create a new QImage object for the tile list
+        ExtTileListImage.fill(Qt::transparent);
+
+        tx = 0;
+        ty = 0;
+
+
+        for (int tc = 25; tc < Num_Parts; tc++)
+        {
+            Draw_Part(tx*Tilesize,ty*Tilesize,tc,&ExtTileListImage); //Draw the bitmap
+            tx++;
+            if (tx == 10)
+            {
+                tx = 0;
+                ty++;
+            }
+        }
+
+
+        BasicTileListImageScaled = BasicTileListImage.scaled(BasicTileListImage.width()*Scale_factor,BasicTileListImage.height()*Scale_factor); //Create a scaled version of the images
+        ExtTileListImageScaled = ExtTileListImage.scaled(ExtTileListImage.width()*Scale_factor,ExtTileListImage.height()*Scale_factor); //Create a scaled version of it
+
+        //Preselect first tile
+        Draw_Hexagon(0,0,QPen(Qt::red, 1),&BasicTileListImageScaled,false,true);
+        selected_tile = 0;
+
+        QVBoxLayout *layout = new QVBoxLayout();
+
+        QLabel *label_basic = new QLabel();
+        label_basic->setPixmap(QPixmap::fromImage(BasicTileListImageScaled));
+
+        QLabel *label_ext = new QLabel();
+        label_ext->setPixmap(QPixmap::fromImage(ExtTileListImageScaled));
+
+        layout->addWidget(title1);
+
+        BasicTilescrollArea = new(QScrollArea);
+        BasicTilescrollArea->setBackgroundRole(QPalette::Dark);
+        BasicTilescrollArea->setWidget(label_basic);
+        BasicTilescrollArea->setVisible(true);
+        layout->addWidget(BasicTilescrollArea);
+
+        layout->addWidget(title2);
+
+        ExtTilescrollArea = new(QScrollArea);
+        ExtTilescrollArea->setBackgroundRole(QPalette::Dark);
+        ExtTilescrollArea->setWidget(label_ext);
+        ExtTilescrollArea->setVisible(true);
+        layout->addWidget(ExtTilescrollArea);
+
         tile_selection->setLayout(layout);
+        tile_selection->resize(BasicTileListImageScaled.width()+42,BasicTileListImageScaled.height()+(ExtTileListImageScaled.height()/2)-18);
         tile_selection->move(screenrect.width()/2, screenrect.top());
         tile_selection->show();
     }
@@ -641,7 +695,7 @@ void Create_Unitselection_window()
         unit_selection->setWindowFlag(Qt::SubWindow);
         unit_selection ->setWindowFlags(Qt::WindowStaysOnTopHint);
 
-        unit_selection->resize(((11*Tilesize)*Scale_factor)+10, (2*((Num_Units/10)+1)*Tilesize)*Scale_factor);
+        unit_selection->resize(((11*Tilesize)*Scale_factor), (2*((Num_Units/10)+1)*Tilesize)*Scale_factor);
         unit_selection->setWindowTitle("Unit selection");
         unit_selection->setMouseTracking(true);
 
@@ -704,27 +758,25 @@ void Create_Unitselection_window()
 
 void Create_buildable_units_window()
 {
-
     buildable = new buildablewindow();
     buildable->setWindowFlag(Qt::SubWindow);
     buildable->setWindowFlags(Qt::WindowStaysOnTopHint);
     buildable->resize(((11*Tilesize)*Scale_factor)+10, (((Num_Units/10)+1)*Tilesize)*Scale_factor);
     buildable->setWindowTitle("Units buildable in factories");
 
-        BuildableImage = QImage((10*Tilesize),((Num_Units/10)+1)*Tilesize, QImage::Format_RGB16); //Create a new QImage object
-        BuildableImage.fill(Qt::transparent);
+    BuildableImage = QImage((10*Tilesize),((Num_Units/10)+1)*Tilesize, QImage::Format_RGB16); //Create a new QImage object
+    BuildableImage.fill(Qt::transparent);
 
 
-        int tx = 0;
-        int ty = 0;
+    int tx = 0;
+    int ty = 0;
 
-        for (int tc = 0; tc < Num_Units; tc++)
-        {
+    for (int tc = 0; tc < Num_Units; tc++)
+    {
         if (SHP.can_be_built[tc] == 0)
             Draw_Unit(tx*Tilesize,ty*Tilesize,tc*6,1,&BuildableImage);
         else
             Draw_Unit(tx*Tilesize,ty*Tilesize,tc*6,3,&BuildableImage);
-
 
         tx++;
         if (tx == 10)
@@ -732,192 +784,204 @@ void Create_buildable_units_window()
             tx = 0;
             ty++;
         }
-        }
+    }
 
+    BuildableImageScaled = BuildableImage.scaled(BuildableImage.width()*Scale_factor,BuildableImage.height()*Scale_factor); //Create a scaled version of it
 
-        BuildableImageScaled = BuildableImage.scaled(BuildableImage.width()*Scale_factor,BuildableImage.height()*Scale_factor); //Create a scaled version of it
+    QLabel *label = new QLabel();
+    label->setPixmap(QPixmap::fromImage(BuildableImageScaled));
 
+    buildablescrollArea = new(QScrollArea);
+    buildablescrollArea->setBackgroundRole(QPalette::Dark);
+    buildablescrollArea->setWidget(label);
+    buildablescrollArea->setVisible(true);
 
-        QLabel *label = new QLabel();       
-        label->setPixmap(QPixmap::fromImage(BuildableImageScaled));
+    buildable_unitname = new QLabel();
+    buildable_unitname->setText("");
 
-        buildablescrollArea = new(QScrollArea);
-        buildablescrollArea->setBackgroundRole(QPalette::Dark);
-        buildablescrollArea->setWidget(label);
-        buildablescrollArea->setVisible(true);
+    QVBoxLayout *layout = new QVBoxLayout();
+    layout->addWidget(buildablescrollArea);
+    layout->addWidget(buildable_unitname);
 
-        buildable_unitname = new QLabel();
-        buildable_unitname->setText("");
+    buildable->setLayout(layout);
 
-        QVBoxLayout *layout = new QVBoxLayout();
-        layout->addWidget(buildablescrollArea);
-        layout->addWidget(buildable_unitname);
-
-
-        buildable->setLayout(layout);
-
-        buildable->show();
-
+    buildable->show();
 }
 
 
 void Create_building_configuration_window()
 {
 
-        if (selected_building == -1)
+    if (selected_building == -1)
+    {
+        QMessageBox              Errormsg;
+        Errormsg.critical(0,"Error","There is no data record for this building!");
+        Errormsg.setFixedSize(500,200);
+        return;
+    }
+    else
+    {
+        building_window = new buildingwindow();
+        building_window->setWindowFlag(Qt::SubWindow);
+        building_window->setWindowFlags(Qt::WindowStaysOnTopHint);
+
+        QString Building_title = "Properties of ";
+        switch (Building_info[selected_building].Properties->Owner)
         {
-            QMessageBox              Errormsg;
-            Errormsg.critical(0,"Error","There is no data record for this building!");
-            Errormsg.setFixedSize(500,200);
-            return;
+            case 0:
+            Building_title += "German ";
+            break;
+
+            case 1:
+            Building_title += "French ";
+            break;
+
+            case 2:
+            Building_title += "Neutral ";
+            break;
         }
-        else
+
+        switch (Building_info[selected_building].Properties->Type)
         {
-            building_window = new buildingwindow();
-            building_window->setWindowFlag(Qt::SubWindow);
-            building_window->setWindowFlags(Qt::MSWindowsFixedSizeDialogHint | Qt::WindowStaysOnTopHint);
+            case 0:
+            Building_title += "Headquarter";
+            break;
 
-            QString Building_title = "Properties of ";
-            switch (Building_info[selected_building].Properties->Owner)
-            {
-                case 0:
-                Building_title += "German ";
-                break;
-                case 1:
-                Building_title += "French ";
-                break;
-                case 2:
-                Building_title += "Neutral ";
-                break;
-            }
+            case 1:
+            Building_title += "Factory";
+             break;
 
-            switch (Building_info[selected_building].Properties->Type)
-            {
-                case 0:
-                Building_title += "Headquarter";
-                break;
-                case 1:
-                Building_title += "Factory";
-                break;
-                case 2:
-                Building_title += "Depot ";
-                break;
-                case 3:
-                Building_title += "Transport Unit ";
-                break;
-            }
+            case 2:
+            Building_title += "Depot ";
+            break;
 
-
-
-            building_window->setWindowTitle(Building_title);
-            Building_Image = QImage((7*Tilesize),Tilesize+1, QImage::Format_RGB16); //Create a new QImage object
-            Building_Image.fill(Qt::transparent);
-
-
-            for (int i = 0; i < 7; i++)
-            {
-                    if (Building_info[selected_building].Properties->Units[i] != 0xFF)
-                    Draw_Unit(i * Tilesize, 0,(Building_info[selected_building].Properties->Units[i] * 6) , Building_info[selected_building].Properties->Owner+1, &Building_Image);
-            }
-
-            Building_Image_Scaled = Building_Image.scaled(Building_Image.width()*Scale_factor,Building_Image.height()*Scale_factor); //Create a scaled version of it
-
-            for (int i = 0; i < 7; i++)
-            {
-                    QPainter painter(&Building_Image_Scaled);
-                    QPen pen;
-                    pen.setWidth(1);
-                    pen.setColor(Qt::white);
-                    painter.setPen(pen);
-                    QRect R((i*Tilesize)*Scale_factor,0,((i*Tilesize)+Tilesize)*Scale_factor,Building_Image_Scaled.height()-1);
-                    painter.drawRect(R);
-                    painter.end();
-            }
-            QLabel *textlabel1 = new QLabel();
-            textlabel1->setText("Units in the building:");
-            QLabel *textlabel2 = new QLabel();
-            textlabel2->setText("Resources generated by this building per turn:");
-
-            QLabel *bitmaplabel = new QLabel();
-            bitmaplabel->setPixmap(QPixmap::fromImage(Building_Image_Scaled));
-
-            Building_ScrollArea = new(QScrollArea);
-            Building_ScrollArea->setBackgroundRole(QPalette::Dark);
-            Building_ScrollArea->setWidget(bitmaplabel);
-            Building_ScrollArea->resize(Building_Image_Scaled.width(),Building_Image_Scaled.height());
-            Building_ScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-            Building_ScrollArea->verticalScrollBar()->hide();
-            Building_ScrollArea->verticalScrollBar()->resize(0, 0);
-            Building_ScrollArea->setVisible(true);
-
-
-            RessourceEdit = new QLineEdit;
-            RessourceEdit->clear();
-            RessourceEdit->setValidator( new QIntValidator(0, 255) );
-            RessourceEdit->setText(QString::number(Building_info[selected_building].Properties->Resources));  //Bisherigen wert anzeigen
-
-
-            QVBoxLayout *layout = new QVBoxLayout();
-            layout->addWidget(textlabel1);
-            layout->addWidget(Building_ScrollArea);
-            layout->addWidget(textlabel2);
-            layout->addWidget(RessourceEdit);
-
-            building_window->setLayout(layout);
-            building_window->show();
+            case 3:
+            Building_title += "Transport Unit ";
+            break;
         }
+
+        building_window->setWindowTitle(Building_title);
+        Building_Image = QImage((7*Tilesize),Tilesize+1, QImage::Format_RGB16); //Create a new QImage object
+        Building_Image.fill(Qt::transparent);
+
+        for (int i = 0; i < 7; i++)
+        {
+            if (Building_info[selected_building].Properties->Units[i] != 0xFF)
+                Draw_Unit(i * Tilesize, 0,(Building_info[selected_building].Properties->Units[i] * 6) , Building_info[selected_building].Properties->Owner+1, &Building_Image);
+        }
+
+        Building_Image_Scaled = Building_Image.scaled(Building_Image.width()*Scale_factor,Building_Image.height()*Scale_factor); //Create a scaled version of it
+
+        for (int i = 0; i < 7; i++)
+        {
+            QPainter painter(&Building_Image_Scaled);
+            QPen pen;
+            pen.setWidth(1);
+            pen.setColor(Qt::white);
+            painter.setPen(pen);
+            QRect R((i*Tilesize)*Scale_factor,0,((i*Tilesize)+Tilesize)*Scale_factor,Building_Image_Scaled.height()-1);
+            painter.drawRect(R);
+            painter.end();
+        }
+
+        QLabel *textlabel1 = new QLabel();
+        textlabel1->setText("Units in the building:");
+        QLabel *textlabel2 = new QLabel();
+        textlabel2->setText("Resources generated by this building per turn:");
+
+        QLabel *bitmaplabel = new QLabel();
+        bitmaplabel->setPixmap(QPixmap::fromImage(Building_Image_Scaled));
+
+        Building_ScrollArea = new(QScrollArea);
+        Building_ScrollArea->setBackgroundRole(QPalette::Dark);
+        Building_ScrollArea->setWidget(bitmaplabel);
+        Building_ScrollArea->resize(Building_Image_Scaled.width(),Building_Image_Scaled.height());
+        Building_ScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        Building_ScrollArea->verticalScrollBar()->hide();
+        Building_ScrollArea->verticalScrollBar()->resize(0, 0);
+        Building_ScrollArea->setVisible(true);
+
+        RessourceEdit = new QLineEdit;
+        RessourceEdit->clear();
+        RessourceEdit->setValidator( new QIntValidator(0, 255) );
+        RessourceEdit->setText(QString::number(Building_info[selected_building].Properties->Resources));  //Bisherigen wert anzeigen
+
+        QVBoxLayout *layout = new QVBoxLayout();
+        layout->addWidget(textlabel1);
+        layout->addWidget(Building_ScrollArea);
+        layout->addWidget(textlabel2);
+        layout->addWidget(RessourceEdit);
+
+        building_window->setLayout(layout);
+        building_window->show();
+    }
 }
 
 
 
 void Create_replace_tile_diag()
 {
+    replace_accepted = false;
+    r1 = selected_tile;
+    r2 = 0;
 
-        replace_accepted = false;
-        r1 = selected_tile;
-        r2 = 0;
+    replacedlg = new replacewindow();
+    replacedlg->setWindowFlag(Qt::SubWindow);
+    replacedlg->setWindowFlags(Qt::WindowStaysOnTopHint);
+    replacedlg->resize(((2*Tilesize)*Scale_factor)+20, Tilesize*Scale_factor);
+    replacedlg->setWindowTitle("Replace tiles");
 
-        replacedlg = new replacewindow();
-        replacedlg->setWindowFlag(Qt::SubWindow);
-        replacedlg->setWindowFlags(Qt::WindowStaysOnTopHint);
-        replacedlg->resize(((2*Tilesize)*Scale_factor)+20, Tilesize*Scale_factor);
-        replacedlg->setWindowTitle("Replace tiles");
+    QLabel *textlabel1 = new QLabel();
+    textlabel1->setText("Replace");
+    QLabel *textlabel2 = new QLabel();
+    textlabel2->setText("with");
 
-        QLabel *textlabel1 = new QLabel();
-        textlabel1->setText("Replace");
-        QLabel *textlabel2 = new QLabel();
-        textlabel2->setText("with");
+    tile_image1 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
+    tile_image1.fill(Qt::transparent);
+    Draw_Part(0,0,r1,&tile_image1);
+    tile_image2 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
+    tile_image2.fill(Qt::transparent);
+    Draw_Part(0,0,r2,&tile_image2);
 
-        tile_image1 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
-        tile_image1.fill(Qt::transparent);
-        Draw_Part(0,0,r1,&tile_image1);
-        tile_image2 = QImage(Tilesize,Tilesize, QImage::Format_RGB16); //Create a new QImage object
-        tile_image2.fill(Qt::transparent);
-        Draw_Part(0,0,r2,&tile_image2);
+    tile_image1 = tile_image1.scaled(tile_image1.width()*Scale_factor,tile_image1.height()*Scale_factor); //scale it
+    tile_image2 = tile_image2.scaled(tile_image2.width()*Scale_factor,tile_image2.height()*Scale_factor); //scale it
 
-        tile_image1 = tile_image1.scaled(tile_image1.width()*Scale_factor,tile_image1.height()*Scale_factor); //scale it
-        tile_image2 = tile_image2.scaled(tile_image2.width()*Scale_factor,tile_image2.height()*Scale_factor); //scale it
+    Tile1 = new QLabel();
+    Tile1->setPixmap(QPixmap::fromImage(tile_image1));
+    Tile2 = new QLabel();
+    Tile2->setPixmap(QPixmap::fromImage(tile_image2));
 
-        Tile1 = new QLabel();
-        Tile1->setPixmap(QPixmap::fromImage(tile_image1));
-        Tile2 = new QLabel();
-        Tile2->setPixmap(QPixmap::fromImage(tile_image2));
+    ok_button = new QPushButton("OK");
+    QObject::connect(ok_button, &QPushButton::clicked, [=]()
+    {
+        replace_accepted = true;
+        replacedlg->close();
+    });
 
-        ok_button = new QPushButton("OK");
-        QObject::connect(ok_button, &QPushButton::clicked, [=]()
-        {
-            replace_accepted = true;
-            replacedlg->close();
-        });
+    QHBoxLayout *layout = new QHBoxLayout();
+    layout->addWidget(textlabel1);
+    layout->addWidget(Tile1);
+    layout->addWidget(textlabel2);
+    layout->addWidget(Tile2);
+    layout->addWidget(ok_button);
 
-        QHBoxLayout *layout = new QHBoxLayout();
-        layout->addWidget(textlabel1);
-        layout->addWidget(Tile1);
-        layout->addWidget(textlabel2);
-        layout->addWidget(Tile2);
-        layout->addWidget(ok_button);
-
-        replacedlg->setLayout(layout);
-        replacedlg->show();
+    replacedlg->setLayout(layout);
+    replacedlg->show();
 }
 
+
+// Returns Checksum of a file or empty QByteArray() on failure.
+QByteArray fileChecksum(const QString &fileName,
+                        QCryptographicHash::Algorithm hashAlgorithm)
+{
+    QFile f(fileName);
+    if (f.open(QFile::ReadOnly))
+    {
+        QCryptographicHash hash(hashAlgorithm);
+        if (hash.addData(&f))
+        {
+            return hash.result();
+        }
+    }
+    return QByteArray();
+}
