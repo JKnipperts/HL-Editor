@@ -37,7 +37,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "v1.0";
+QString                  Version = "v1.01";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -116,8 +116,8 @@ bool                     Ocean = false;
 
 //SHA-1 Checksums of different .COM file types in HL 1914-1918 (packed and unpacked)
 
-auto TypeI_checksum = QByteArray::fromHex("7101b53f49a9c4784625944cc210edd2798f26fa");
-auto TypeI_checksum_up = QByteArray::fromHex("b02d7202be4c1a0b0f6b56200c231a72aea1b4e0");
+auto TypeI_checksum = QByteArray::fromHex("7101b53f49a9c4784625944cc210edd2798f26fa");  //Checksum for TPWM packed file
+auto TypeI_checksum_up = QByteArray::fromHex("b02d7202be4c1a0b0f6b56200c231a72aea1b4e0");//Checksum for unpacked file
 auto TypeII_checksum = QByteArray::fromHex("e0d664b4e2a1074f3fecb0f0e6e5f3e49631accc");
 auto TypeII_checksum_up = QByteArray::fromHex("2104f458621bd2e3480d5ee05ae9e6ce30f112f7");
 auto TypeIII_checksum = QByteArray::fromHex("76fd238fe293c61bed9c5e1ad7e741d15d93e706");
@@ -893,6 +893,7 @@ void MainWindow::open_by_code_diag()
         Map_file = Map_file+".fin" ;
         Map_file = MapDir+"/"+Map_file;
         Map_file.replace("/'", "\\'");
+
         Open_Map();
     }
 }
@@ -927,6 +928,33 @@ void MainWindow::saveas_diag()
         Errormsg.setFixedSize(500,200);
     }
 }
+
+
+void MainWindow::saveimage_diag()
+{
+    if (Map.loaded == true)
+    {
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Save Image File"),
+                                                        QString(),
+                                                        tr("Images (*.png)"));
+        if (!fileName.isEmpty())
+        {
+            if (MapImage.save(fileName) != true)
+            {
+              QMessageBox              Errormsg;
+              Errormsg.warning(this,"","Unfortunately I could not save the image file!");
+              Errormsg.setFixedSize(500,200);
+            }
+        }
+    }
+    else
+    {
+        QMessageBox              Errormsg;
+        Errormsg.warning(this,"","There's nothing I could save to an image file.... Why don't you load a map first or create a new one?");
+        Errormsg.setFixedSize(500,200);
+    }
+}
+
 
 
 
@@ -1145,6 +1173,7 @@ void MainWindow::setPath_diag()
     QDir           dir;
 
 
+
     GameDir = QFileDialog::getExistingDirectory(this, tr("Please select the directory of Historyline 1914-1918"),
                                                 GameDir,
                                                 QFileDialog::ShowDirsOnly
@@ -1165,9 +1194,9 @@ void MainWindow::setPath_diag()
 
             if (!cfgFile.isOpen())
             {
-                QMessageBox              Errormsg;
-                Errormsg.warning(this,"","I cannot save the configuration file!");
-                Errormsg.setFixedSize(500,200);
+              QMessageBox              Errormsg;
+              Errormsg.warning(this,"","I cannot save the configuration file!");
+              Errormsg.setFixedSize(500,200);
             }
             else
             {
@@ -1176,7 +1205,8 @@ void MainWindow::setPath_diag()
                 out << Scale_factor;
                 cfgFile.close();
 
-                MapDir = GameDir+MapDir;
+
+                MapDir = GameDir+"/MAP";
             }
         }
 
@@ -1223,7 +1253,7 @@ void MainWindow::setScale_diag()
             out << Scale_factor;
             cfgFile.close();
 
-            MapDir = GameDir+MapDir;
+            MapDir = GameDir+"/MAP";
         }
 
         if (Map.loaded)
@@ -1976,6 +2006,10 @@ void MainWindow::createActions()
     saveasAct->setStatusTip(tr("Save the map to a new file"));
     connect(saveasAct, &QAction::triggered, this, &MainWindow::saveas_diag);
 
+    saveImageAct = new QAction(tr("Save an image of the map"), this);
+    saveImageAct->setStatusTip(tr("Save an image of your map"));
+    connect(saveImageAct, &QAction::triggered, this, &MainWindow::saveimage_diag);
+
     addtogameAct = new QAction(tr("&Add map to game"), this);
     addtogameAct->setStatusTip(tr("Adds your map to the game"));
     connect(addtogameAct, &QAction::triggered, this, &MainWindow::add_diag);
@@ -2058,6 +2092,7 @@ void MainWindow::createMenus()
     fileMenu->addAction(openbyCodeAct);
     fileMenu->addAction(saveAct);
     fileMenu->addAction(saveasAct);
+    fileMenu->addAction(saveImageAct);
     fileMenu->addAction(addtogameAct);
     fileMenu->addAction(removefromgameAct);
     fileMenu->addSeparator();

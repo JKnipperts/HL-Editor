@@ -34,6 +34,7 @@ private slots:
     void open_by_code_diag();
     void save_diag();
     void saveas_diag();
+    void saveimage_diag();
     void add_diag();
     void remove_diag();
     void grid_diag();
@@ -64,6 +65,7 @@ private:
     QAction *openbyCodeAct;
     QAction *saveAct;
     QAction *saveasAct;
+    QAction *saveImageAct;
     QAction *addtogameAct;
     QAction *removefromgameAct;
     QAction *exitAct;

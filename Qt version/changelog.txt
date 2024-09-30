@@ -1,5 +1,9 @@
 ﻿Changes made between the different versions of the program:
 
+1.01
+  - Function to save an image of the current map has been added
+  - Fixed a small bug that corrupted the path specification
+
 1.0:
   - Fixed a small bug that grassland was added when enlarging an ocean map.
   - Fixed a bug that allowed building parts to be placed outside the map.
