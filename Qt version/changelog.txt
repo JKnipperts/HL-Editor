@@ -1,5 +1,9 @@
 ﻿Changes made between the different versions of the program:
 
+1.02
+  - Added "Save changes" Button in the Building configuration dialog
+  - fixed a bug that corrupted the shown ressources of a building
+
 1.01
   - Function to save an image of the current map has been added
   - Fixed a small bug that corrupted the path specification
