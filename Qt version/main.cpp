@@ -1,5 +1,5 @@
 /*
-* HL Editor - v1.0
+* HL Editor - v1.02
 * by Jan Knipperts (Dragonsphere /DOSReloaded)
 *
 * A map editor for the game History Line 1914-1918 by BlueByte
@@ -25,7 +25,8 @@
 #include <QInputDialog>
 #include <QScrollArea>
 #include <QMouseEvent>
-#include  <QPushButton>
+#include <QPushButton>
+
 #include "tilelist.h"
 #include "unitlist.h"
 #include "buildable.h"
@@ -37,7 +38,7 @@
 
 QString                  Title = "History Line 1914-1918 Editor";
 QString                  Author = "by Jan Knipperts";
-QString                  Version = "v1.01";
+QString                  Version = "v1.02";
 
 QString                  GameDir;                           //Path to History Line 1914-1918 (read from config file)
 QString                  Map_file;                          //String for user selected map file
@@ -92,7 +93,6 @@ QImage                   tile_image1;
 QLabel                   *Tile1;
 QImage                   tile_image2;
 QLabel                   *Tile2;
-QPushButton              *ok_button;
 unsigned char            r1,r2;
 
 QRect                    screenrect;                        //A QRect to save the screen geometry and position windows accordingly.
@@ -113,6 +113,7 @@ bool                     grid_enabled = false;
 bool                     show_warnings = true;
 bool                     Player2 = true;
 bool                     Ocean = false;
+bool                     Update_Ressources;
 
 //SHA-1 Checksums of different .COM file types in HL 1914-1918 (packed and unpacked)
 
@@ -148,7 +149,7 @@ bool Check_levelcode(QString code)
     {
         if (!code.at(i).isLetter())   //character is no letter
             return false;
-        if (!code.at(i).toLatin1())   //character is no valid ASCII characer
+        if (!code.at(i).toLatin1())   //character is no valid ASCII character
             return false;
     }
 
@@ -178,7 +179,6 @@ MainWindow::MainWindow()
     scrollArea->setVisible(true);
 
     setCentralWidget(scrollArea);
-
 
 }
 
@@ -486,14 +486,14 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
             {
 
                 selected_building = Get_Building_by_field(field_pos);
-
                 if (building_window == NULL)
-                  Create_building_configuration_window();               
+                    Create_building_configuration_window();
                 else
                 {
-                  building_window->close();                  
-                  Create_building_configuration_window();
+                    building_window->close();
+                    Create_building_configuration_window();
                 }
+
             }
             else
             {
@@ -2394,6 +2394,7 @@ void buildingwindow::mousePressEvent(QMouseEvent *event)
         bitmaplabel->setPixmap(QPixmap::fromImage(Building_Image_Scaled));
         Building_ScrollArea->setWidget(bitmaplabel);
         Building_ScrollArea->update();
+
         building_window->update();
         changes = true; //Now there are unsaved changes
        }
@@ -2438,16 +2439,6 @@ void buildingwindow::mousePressEvent(QMouseEvent *event)
        }
     }
 
-}
-
-void buildingwindow::closeEvent(QCloseEvent *event)
-{
-    if (selected_building != -1)
-    {
-        if (RessourceEdit->text().toInt() != Building_info[selected_building].Properties->Resources)
-        Building_info[selected_building].Properties->Resources = RessourceEdit->text().toInt();
-    }
-    event->accept();
 }
 
 

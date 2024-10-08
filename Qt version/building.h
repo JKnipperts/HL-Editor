@@ -18,7 +18,6 @@ private:
 public slots:
 
 protected:
-    void closeEvent (QCloseEvent *event) override;
     void mousePressEvent (QMouseEvent *event) override;
 
 

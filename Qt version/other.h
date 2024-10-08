@@ -809,6 +809,8 @@ void Create_buildable_units_window()
 }
 
 
+
+
 void Create_building_configuration_window()
 {
 
@@ -905,18 +907,34 @@ void Create_building_configuration_window()
         RessourceEdit->clear();
         RessourceEdit->setValidator( new QIntValidator(0, 255) );
         RessourceEdit->setText(QString::number(Building_info[selected_building].Properties->Resources));  //Bisherigen wert anzeigen
+        Update_Ressources = true;
+
+        QPushButton *Button = new QPushButton("Save changes");
+        Button->setGeometry(QRect(QPoint(100, 100), QSize(200, 50)));
+        Button->setStyleSheet("background-color: rgb(240,240,240)");
+        QObject::connect(Button, &QPushButton::clicked, [=]()
+        {
+            if (selected_building != -1)
+            {
+                if ((RessourceEdit->text().toInt() != Building_info[selected_building].Properties->Resources) && (Update_Ressources))
+                    Building_info[selected_building].Properties->Resources = RessourceEdit->text().toInt();
+            }
+            building_window->close();
+        });
 
         QVBoxLayout *layout = new QVBoxLayout();
         layout->addWidget(textlabel1);
         layout->addWidget(Building_ScrollArea);
         layout->addWidget(textlabel2);
         layout->addWidget(RessourceEdit);
+        layout->addWidget(Button);
 
         building_window->setLayout(layout);
         building_window->show();
+
+
     }
 }
-
 
 
 void Create_replace_tile_diag()
@@ -951,19 +969,19 @@ void Create_replace_tile_diag()
     Tile2 = new QLabel();
     Tile2->setPixmap(QPixmap::fromImage(tile_image2));
 
-    ok_button = new QPushButton("OK");
-    QObject::connect(ok_button, &QPushButton::clicked, [=]()
-    {
-        replace_accepted = true;
-        replacedlg->close();
-    });
+    QPushButton *okButton = new QPushButton("OK");
+    QObject::connect(okButton, &QPushButton::clicked, [=]()
+                     {
+                         replace_accepted = true;
+                         replacedlg->close();
+                     });
 
     QHBoxLayout *layout = new QHBoxLayout();
     layout->addWidget(textlabel1);
     layout->addWidget(Tile1);
     layout->addWidget(textlabel2);
     layout->addWidget(Tile2);
-    layout->addWidget(ok_button);
+    layout->addWidget(okButton);
 
     replacedlg->setLayout(layout);
     replacedlg->show();
